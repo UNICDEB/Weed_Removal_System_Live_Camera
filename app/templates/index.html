@@ -120,37 +120,39 @@
                         No detection yet
                     </p>
                 </div>
+                
+                <div class="card shadow-sm p-3 mb-3">
+                    <h6>🎮 System Control</h6>
 
-            </div>
+                    <div class="d-grid gap-2">
 
-            <div class="card shadow-sm p-3 mb-3">
-                <h6>🎮 System Control</h6>
+                        <button class="btn btn-success" onclick="sendCommand('xF')">
+                            ▶ Start (Forward)
+                        </button>
 
-                <div class="d-grid gap-2">
+                        <button class="btn btn-danger" onclick="sendCommand('xS')">
+                            ■ Stop
+                        </button>
 
-                    <button class="btn btn-success" onclick="sendCommand('xF')">
-                        ▶ Start (Forward)
-                    </button>
+                        <button class="btn btn-primary" onclick="sendCommand('xH')">
+                            ⬆ Speed Up
+                        </button>
 
-                    <button class="btn btn-danger" onclick="sendCommand('xS')">
-                        ■ Stop
-                    </button>
+                        <button class="btn btn-secondary" onclick="sendCommand('xL')">
+                            ⬇ Speed Down
+                        </button>
 
-                    <button class="btn btn-primary" onclick="sendCommand('xH')">
-                        ⬆ Speed Up
-                    </button>
+                    </div>
 
-                    <button class="btn btn-secondary" onclick="sendCommand('xL')">
-                        ⬇ Speed Down
-                    </button>
+                    <p class="mt-2">Arduino Feedback:
+                        <span id="arduinoFeedback">-</span>
+                    </p>
 
                 </div>
 
-                <p class="mt-2">Arduino Feedback:
-                    <span id="arduinoFeedback">-</span>
-                </p>
-
             </div>
+
+
 
 
             <!-- RIGHT PANEL -->

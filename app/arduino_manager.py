@@ -15,13 +15,23 @@ class ArduinoManager:
 
     def connect(self):
         try:
-            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+
+            self.ser = serial.Serial(
+                self.port,
+                self.baudrate,
+                timeout=1
+            )
+
+            time.sleep(2)  # allow Arduino reset
             self.connected = True
             print("Arduino Connected")
+
         except Exception as e:
             print("Arduino Connection Failed:", e)
             self.connected = False
+
 
     # ----------------------------------
 

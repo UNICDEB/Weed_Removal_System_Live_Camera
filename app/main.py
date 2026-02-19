@@ -8,6 +8,7 @@ from app.arduino_manager import arduino_manager
 import time
 
 
+
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
 
@@ -90,6 +91,17 @@ def arduino_command(cmd: str):
         "sent": cmd,
         "feedback": feedback
     }
+
+
+@app.post("/exit")
+def exit_system():
+    camera_controller.stop()
+
+    if arduino_manager.ser and arduino_manager.ser.is_open:
+        arduino_manager.ser.close()
+
+    import os
+    os._exit(0)
 
 
 
