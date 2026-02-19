@@ -1,0 +1,371 @@
+# import pyrealsense2 as rs
+# import numpy as np
+# import cv2
+# import torch
+# from ultralytics import YOLO
+# from app.depth_filters import apply_depth_filters
+# from app.network_manager import network_manager
+
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+
+# class DetectionManager:
+
+#     def __init__(self):
+#         self.running = False
+#         self.frame = None
+#         self.confidence = 0.5
+
+#         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+#         print("Running on:", self.device)
+
+#         self.model = YOLO(MODEL_PATH)
+#         self.model.to(self.device)
+#         self.detection_count = 0
+#         self.latest_result = None
+#         self.log = []
+
+#     def set_confidence(self, conf):
+#         self.confidence = conf
+
+#     def stop(self):
+#         self.running = False
+
+#     def run(self):
+#         self.running = True
+
+#         pipeline = rs.pipeline()
+#         config = rs.config()
+
+#         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
+#         config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
+
+#         pipeline.start(config)
+#         align = rs.align(rs.stream.color)
+
+#         while self.running:
+#             frames = pipeline.wait_for_frames()
+#             aligned = align.process(frames)
+
+#             color_frame = aligned.get_color_frame()
+#             depth_frame = aligned.get_depth_frame()
+
+#             if not color_frame or not depth_frame:
+#                 continue
+
+#             depth_frame = apply_depth_filters(depth_frame)
+
+#             color_image = np.asanyarray(color_frame.get_data()).copy()
+
+#             results = self.model(color_image, conf=self.confidence,
+#                                  imgsz=640, device=self.device)
+
+#             for box in results[0].boxes:
+#                 x1, y1, x2, y2 = map(int, box.xyxy[0])
+#                 center_x = int((x1 + x2) / 2)
+#                 center_y = int((y1 + y2) / 2)
+
+#                 depth = depth_frame.get_distance(center_x, center_y)
+#                 if depth == 0:
+#                     continue
+
+#                 intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+#                 point_3d = rs.rs2_deproject_pixel_to_point(
+#                     intrin, [center_x, center_y], depth)
+
+#                 X_cm = point_3d[0] * 100
+#                 Y_cm = point_3d[1] * 100
+#                 Z_cm = point_3d[2] * 100
+
+#                 cv2.rectangle(color_image, (x1, y1), (x2, y2), (0,255,0), 2)
+#                 cv2.putText(color_image,
+#                             f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
+#                             (x1, y1-10),
+#                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,0,0), 2)
+
+#                 network_manager.send(X_cm, Y_cm, Z_cm)
+
+#             self.frame = color_image
+
+#         pipeline.stop()
+
+###################
+
+import pyrealsense2 as rs
+import numpy as np
+import cv2
+import torch
+import time
+from ultralytics import YOLO
+from app.depth_filters import apply_depth_filters
+from app.network_manager import network_manager
+
+MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_lily.pt"
+
+class DetectionManager:
+
+    def __init__(self):
+
+        self.running = False
+        self.frame = None
+        self.confidence = 0.5
+        self.zone_mode = False
+
+
+        # 🔥 GPU / CPU Detection
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print("Running on:", self.device.upper())
+
+        self.model = YOLO(MODEL_PATH)
+        self.model.to(self.device)
+
+        # 🔥 Dashboard Variables
+        self.detection_count = 0
+        self.latest_result = None
+        self.log = []
+
+    # --------------------------------------------------
+
+    def set_confidence(self, conf):
+        self.confidence = float(conf)
+
+    # --------------------------------------------------
+
+    def stop(self):
+        self.running = False
+
+    # --------------------------------------------------
+
+    def run(self):
+
+        self.running = True
+
+        pipeline = rs.pipeline()
+        config = rs.config()
+
+        config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
+        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
+
+        profile = pipeline.start(config)
+        align = rs.align(rs.stream.color)
+
+        print("Camera + Detection Started")
+
+        try:
+            # while self.running:
+
+            #     frames = pipeline.wait_for_frames()
+            #     aligned = align.process(frames)
+
+            #     color_frame = aligned.get_color_frame()
+            #     depth_frame = aligned.get_depth_frame()
+
+            #     if not color_frame or not depth_frame:
+            #         continue
+
+            #     depth_frame = apply_depth_filters(depth_frame)
+
+            #     color_image = np.asanyarray(color_frame.get_data()).copy()
+
+            #     # 🔥 YOLO Inference
+            #     results = self.model(
+            #         color_image,
+            #         conf=self.confidence,
+            #         imgsz=640,
+            #         device=self.device,
+            #         verbose=False
+            #     )
+
+            #     detection_found = False
+
+            #     for box in results[0].boxes:
+
+            #         detection_found = True
+
+            #         x1, y1, x2, y2 = map(int, box.xyxy[0])
+            #         center_x = int((x1 + x2) / 2)
+            #         center_y = int((y1 + y2) / 2)
+
+            #         depth = depth_frame.get_distance(center_x, center_y)
+            #         if depth == 0:
+            #             continue
+
+            #         intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+            #         point_3d = rs.rs2_deproject_pixel_to_point(
+            #             intrin, [center_x, center_y], depth)
+
+            #         X_cm = point_3d[0] * 100
+            #         Y_cm = point_3d[1] * 100
+            #         Z_cm = point_3d[2] * 100
+
+            #         # 🔥 Draw Box
+            #         cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            #         cv2.circle(color_image, (center_x, center_y), 4, (0, 0, 255), -1)
+
+            #         cv2.putText(
+            #             color_image,
+            #             f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
+            #             (x1, y1 - 10),
+            #             cv2.FONT_HERSHEY_SIMPLEX,
+            #             0.6,
+            #             (255, 0, 0),
+            #             2
+            #         )
+
+            #         # 🔥 Update Dashboard Values
+            #         self.detection_count += 1
+
+            #         self.latest_result = {
+            #             "X": round(X_cm, 2),
+            #             "Y": round(Y_cm, 2),
+            #             "Z": round(Z_cm, 2)
+            #         }
+
+            #         self.log.append(self.latest_result)
+
+            #         # Keep only last 100 entries
+            #         if len(self.log) > 100:
+            #             self.log.pop(0)
+
+            #         print("Detected:", self.latest_result)
+
+            #         # 🔥 Send to Receiver
+            #         network_manager.send(X_cm, Y_cm, Z_cm)
+
+            #     # Even if no detection, keep frame updating
+            #     self.frame = color_image
+
+            #     time.sleep(0.001)
+
+            while self.running:
+
+                frames = pipeline.wait_for_frames()
+                aligned = align.process(frames)
+
+                color_frame = aligned.get_color_frame()
+                depth_frame = aligned.get_depth_frame()
+
+                if not color_frame or not depth_frame:
+                    continue
+
+                depth_frame = apply_depth_filters(depth_frame)
+
+                color_image = np.asanyarray(color_frame.get_data()).copy()
+                height, width, _ = color_image.shape
+
+                results = self.model(
+                    color_image,
+                    conf=self.confidence,
+                    imgsz=640,
+                    device=self.device,
+                    verbose=False
+                )
+
+                intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+
+                # ----------------------------------------------------
+                # 🔥 ZONE LOGIC
+                # ----------------------------------------------------
+                left_pixel = None
+                right_pixel = None
+
+                if self.zone_mode:
+
+                    Z_ref = 0.5  # 50 cm reference forward
+
+                    left_point = [-0.15, 0, Z_ref]
+                    right_point = [0.15, 0, Z_ref]
+
+                    left_pixel = rs.rs2_project_point_to_pixel(intrin, left_point)
+                    right_pixel = rs.rs2_project_point_to_pixel(intrin, right_point)
+
+                    left_x = int(left_pixel[0])
+                    right_x = int(right_pixel[0])
+
+                    # Draw vertical lines
+                    cv2.line(color_image, (left_x, 0), (left_x, height), (255, 0, 0), 2)
+                    cv2.line(color_image, (right_x, 0), (right_x, height), (255, 0, 0), 2)
+
+                # ----------------------------------------------------
+
+                for box in results[0].boxes:
+
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    center_x = int((x1 + x2) / 2)
+                    center_y = int((y1 + y2) / 2)
+
+                    depth = depth_frame.get_distance(center_x, center_y)
+                    if depth == 0:
+                        continue
+
+                    point_3d = rs.rs2_deproject_pixel_to_point(
+                        intrin, [center_x, center_y], depth)
+
+                    X_cm = point_3d[0] * 100
+                    Y_cm = point_3d[1] * 100
+                    Z_cm = point_3d[2] * 100
+
+                    # Draw bounding box
+                    cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.circle(color_image, (center_x, center_y), 4, (0, 0, 255), -1)
+
+                    send_allowed = True
+
+                    # ----------------------------------------------------
+                    # 🔥 APPLY ZONE FILTER
+                    # ----------------------------------------------------
+                    if self.zone_mode:
+
+                        if center_x < left_x or center_x > right_x:
+                            send_allowed = False
+
+                            cv2.putText(
+                                color_image,
+                                "Outside the Box",
+                                (x1, y1 - 25),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.7,
+                                (0, 0, 255),
+                                2
+                            )
+
+                    # ----------------------------------------------------
+
+                    if send_allowed:
+
+                        self.detection_count += 1
+
+                        self.latest_result = {
+                            "X": round(X_cm, 2),
+                            "Y": round(Y_cm, 2),
+                            "Z": round(Z_cm, 2)
+                        }
+
+                        self.log.append(self.latest_result)
+                        if len(self.log) > 100:
+                            self.log.pop(0)
+
+                        network_manager.send(X_cm, Y_cm, Z_cm)
+
+                        cv2.putText(
+                            color_image,
+                            f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
+                            (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (255, 0, 0),
+                            2
+                        )
+
+                self.frame = color_image
+
+
+        finally:
+            pipeline.stop()
+            print("Camera Stopped Safely")
+
+
+    def toggle_zone_mode(self):
+        self.zone_mode = not self.zone_mode
+        print("Zone Mode:", self.zone_mode)
+
