@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Weed AI Industrial Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -38,195 +39,242 @@
 
 <body>
 
-<div class="container py-4">
+    <div class="container py-4">
 
-    <div class="text-center mb-4">
-        <h3 class="fw-bold text-dark">🌿 Weed Detection AI Dashboard</h3>
-        <p class="text-muted">Real-Time RGB + Depth Coordinate Monitoring</p>
-    </div>
+        <div class="text-center mb-4">
+            <h3 class="fw-bold text-dark">🌿 Weed Detection AI Dashboard</h3>
+            <p class="text-muted">Real-Time RGB + Depth Coordinate Monitoring</p>
+        </div>
 
-    <div class="row">
+        <div class="row">
 
-        <!-- LEFT PANEL -->
-        <div class="col-md-4">
+            <!-- LEFT PANEL -->
+            <div class="col-md-4">
 
-            <!-- Control Panel -->
-            <div class="card shadow-sm p-4 mb-3">
-                <h5 class="mb-3 text-dark">⚙ Control Panel</h5>
+                <!-- Control Panel -->
+                <div class="card shadow-sm p-4 mb-3">
+                    <h5 class="mb-3 text-dark">⚙ Control Panel</h5>
 
-                <label class="form-label">Confidence Threshold</label>
+                    <label class="form-label">Confidence Threshold</label>
 
-                <input type="range"
-                       class="form-range"
-                       min="0" max="1" step="0.01"
-                       value="0.5"
-                       id="confSlider"
-                       oninput="updateConfidenceValue(this.value)">
+                    <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="confSlider"
+                        oninput="updateConfidenceValue(this.value)">
 
-                <input type="number"
-                       class="form-control mb-3"
-                       min="0" max="1" step="0.01"
-                       value="0.5"
-                       id="confInput"
-                       oninput="syncSlider(this.value)">
+                    <input type="number" class="form-control mb-3" min="0" max="1" step="0.01" value="0.5"
+                        id="confInput" oninput="syncSlider(this.value)">
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success" onclick="startCamera()">
+                            ▶ Open Camera
+                        </button>
+
+                        <button class="btn btn-warning" onclick="stopCamera()">
+                            ⏹ Stop Camera
+                        </button>
+
+                        <button class="btn btn-danger" onclick="exitSystem()">
+                            ❌ Exit System
+                        </button>
+
+                        <button id="zoneBtn" class="btn btn-primary" onclick="toggleZone()">
+                            Enable Zone Mode
+                        </button>
+
+                        <div class="card shadow-sm p-3 mb-3">
+                            <h6>📡 Target Selection</h6>
+
+                            <select class="form-select" onchange="setTarget(this.value)">
+                                <option value="rpi">RPI</option>
+                                <option value="arduino">Arduino</option>
+                            </select>
+
+                            <p class="mt-2">Arduino Status:
+                                <span id="arduinoStatus">-</span>
+                            </p>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- System Info -->
+                <div class="card shadow-sm p-3 mb-3">
+                    <h6 class="text-dark">🖥 System Info</h6>
+                    <p>Device:
+                        <span id="device" class="fw-bold text-primary">-</span>
+                    </p>
+
+                    <p>Receiver:
+                        <span id="receiver" class="fw-bold">-</span>
+                    </p>
+
+                    <p>Total Detections:
+                        <span id="count" class="fw-bold text-success">0</span>
+                    </p>
+                </div>
+
+                <!-- Latest Coordinate -->
+                <div class="card shadow-sm p-3">
+                    <h6 class="text-dark">📍 Latest Coordinate (cm)</h6>
+                    <p id="latestCoord" class="fw-bold text-secondary">
+                        No detection yet
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="card shadow-sm p-3 mb-3">
+                <h6>🎮 System Control</h6>
 
                 <div class="d-grid gap-2">
-                    <button class="btn btn-success" onclick="startCamera()">
-                        ▶ Open Camera
+
+                    <button class="btn btn-success" onclick="sendCommand('xF')">
+                        ▶ Start (Forward)
                     </button>
 
-                    <button class="btn btn-warning" onclick="stopCamera()">
-                        ⏹ Stop Camera
+                    <button class="btn btn-danger" onclick="sendCommand('xS')">
+                        ■ Stop
                     </button>
 
-                    <button class="btn btn-danger" onclick="exitSystem()">
-                        ❌ Exit System
+                    <button class="btn btn-primary" onclick="sendCommand('xH')">
+                        ⬆ Speed Up
                     </button>
 
-                    <button id="zoneBtn"
-                            class="btn btn-primary"
-                            onclick="toggleZone()">
-                        Enable Zone Mode
+                    <button class="btn btn-secondary" onclick="sendCommand('xL')">
+                        ⬇ Speed Down
                     </button>
 
                 </div>
+
+                <p class="mt-2">Arduino Feedback:
+                    <span id="arduinoFeedback">-</span>
+                </p>
+
             </div>
 
-            <!-- System Info -->
-            <div class="card shadow-sm p-3 mb-3">
-                <h6 class="text-dark">🖥 System Info</h6>
-                <p>Device:
-                    <span id="device" class="fw-bold text-primary">-</span>
-                </p>
 
-                <p>Receiver:
-                    <span id="receiver" class="fw-bold">-</span>
-                </p>
+            <!-- RIGHT PANEL -->
+            <div class="col-md-8">
 
-                <p>Total Detections:
-                    <span id="count" class="fw-bold text-success">0</span>
-                </p>
-            </div>
+                <!-- Live Stream -->
+                <div class="card shadow-sm p-3 mb-3">
+                    <h5 class="text-dark">📷 Live RGB Stream</h5>
 
-            <!-- Latest Coordinate -->
-            <div class="card shadow-sm p-3">
-                <h6 class="text-dark">📍 Latest Coordinate (cm)</h6>
-                <p id="latestCoord" class="fw-bold text-secondary">
-                    No detection yet
-                </p>
-            </div>
-
-        </div>
-
-        <!-- RIGHT PANEL -->
-        <div class="col-md-8">
-
-            <!-- Live Stream -->
-            <div class="card shadow-sm p-3 mb-3">
-                <h5 class="text-dark">📷 Live RGB Stream</h5>
-
-                <div class="video-box">
-                    <img id="video"
-                         width="100%"
-                         class="img-fluid rounded">
+                    <div class="video-box">
+                        <img id="video" width="100%" class="img-fluid rounded">
+                    </div>
                 </div>
-            </div>
 
-            <!-- Detection Log -->
-            <div class="card shadow-sm p-3">
-                <h6 class="text-dark">📜 Detection Log</h6>
+                <!-- Detection Log -->
+                <div class="card shadow-sm p-3">
+                    <h6 class="text-dark">📜 Detection Log</h6>
 
-                <div class="log-box" id="logBox"></div>
+                    <div class="log-box" id="logBox"></div>
+                </div>
+
             </div>
 
         </div>
 
     </div>
 
-</div>
+    <script>
 
-<script>
-
-function updateConfidenceValue(val){
-    document.getElementById("confInput").value = val;
-}
-
-function syncSlider(val){
-    document.getElementById("confSlider").value = val;
-}
-
-function startCamera(){
-    let conf = document.getElementById("confInput").value;
-
-    fetch("/start?conf="+conf,{method:"POST"})
-    .then(()=>{
-        document.getElementById("video").src="/video";
-    });
-}
-
-function stopCamera(){
-    fetch("/stop",{method:"POST"})
-    .then(()=>{
-        document.getElementById("video").src="";
-    });
-}
-
-function exitSystem(){
-    fetch("/exit",{method:"POST"});
-}
-
-function updateStatus(){
-    fetch("/status")
-    .then(res=>res.json())
-    .then(data=>{
-
-        document.getElementById("device").innerText = data.device;
-
-        document.getElementById("receiver").innerText =
-            data.receiver ? "Connected" : "Disconnected";
-
-        document.getElementById("receiver").style.color =
-            data.receiver ? "green" : "red";
-
-        document.getElementById("count").innerText =
-            data.detection_count;
-
-        if(data.latest){
-            document.getElementById("latestCoord").innerText =
-                `X: ${data.latest.X} cm | Y: ${data.latest.Y} cm | Z: ${data.latest.Z} cm`;
+        function updateConfidenceValue(val) {
+            document.getElementById("confInput").value = val;
         }
 
-        let logBox = document.getElementById("logBox");
-        logBox.innerHTML = "";
-
-        data.log.forEach(item=>{
-            logBox.innerHTML +=
-                `X: ${item.X} cm | Y: ${item.Y} cm | Z: ${item.Z} cm<br>`;
-        });
-
-        logBox.scrollTop = logBox.scrollHeight;
-    });
-}
-
-function toggleZone(){
-    fetch("/toggle_zone",{method:"POST"})
-    .then(res=>res.json())
-    .then(data=>{
-        let btn=document.getElementById("zoneBtn");
-        if(data.zone){
-            btn.innerText="Disable Zone Mode";
-            btn.className="btn btn-secondary";
-        }else{
-            btn.innerText="Enable Zone Mode";
-            btn.className="btn btn-primary";
+        function syncSlider(val) {
+            document.getElementById("confSlider").value = val;
         }
-    });
-}
+
+        function startCamera() {
+            let conf = document.getElementById("confInput").value;
+
+            fetch("/start?conf=" + conf, { method: "POST" })
+                .then(() => {
+                    document.getElementById("video").src = "/video";
+                });
+        }
+
+        function stopCamera() {
+            fetch("/stop", { method: "POST" })
+                .then(() => {
+                    document.getElementById("video").src = "";
+                });
+        }
+
+        function exitSystem() {
+            fetch("/exit", { method: "POST" });
+        }
+
+        function updateStatus() {
+            fetch("/status")
+                .then(res => res.json())
+                .then(data => {
+
+                    document.getElementById("device").innerText = data.device;
+
+                    document.getElementById("receiver").innerText =
+                        data.receiver ? "Connected" : "Disconnected";
+
+                    document.getElementById("receiver").style.color =
+                        data.receiver ? "green" : "red";
+
+                    document.getElementById("count").innerText =
+                        data.detection_count;
+
+                    if (data.latest) {
+                        document.getElementById("latestCoord").innerText =
+                            `X: ${data.latest.X} cm | Y: ${data.latest.Y} cm | Z: ${data.latest.Z} cm`;
+                    }
+
+                    let logBox = document.getElementById("logBox");
+                    logBox.innerHTML = "";
+
+                    data.log.forEach(item => {
+                        logBox.innerHTML +=
+                            `X: ${item.X} cm | Y: ${item.Y} cm | Z: ${item.Z} cm<br>`;
+                    });
+
+                    logBox.scrollTop = logBox.scrollHeight;
+                });
+        }
+
+        function toggleZone() {
+            fetch("/toggle_zone", { method: "POST" })
+                .then(res => res.json())
+                .then(data => {
+                    let btn = document.getElementById("zoneBtn");
+                    if (data.zone) {
+                        btn.innerText = "Disable Zone Mode";
+                        btn.className = "btn btn-secondary";
+                    } else {
+                        btn.innerText = "Enable Zone Mode";
+                        btn.className = "btn btn-primary";
+                    }
+                });
+        }
+
+        function setTarget(mode) {
+            fetch("/set_target?mode=" + mode, { method: "POST" });
+        }
+
+        function sendCommand(cmd) {
+            fetch("/arduino_command?cmd=" + cmd, { method: "POST" })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("arduinoFeedback").innerText =
+                        "Sent: " + data.sent + " | Feedback: " + data.feedback;
+                });
+        }
 
 
-setInterval(updateStatus, 500);
 
-</script>
+        setInterval(updateStatus, 500);
+
+    </script>
 
 </body>
+
 </html>

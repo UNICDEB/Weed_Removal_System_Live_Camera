@@ -4,6 +4,8 @@ from fastapi.templating import Jinja2Templates
 from app.camera_manager import camera_controller
 import cv2
 from app.network_manager import network_manager
+from app.arduino_manager import arduino_manager
+import time
 
 
 app = FastAPI()
@@ -65,5 +67,30 @@ def toggle_zone():
         camera_controller.detector.toggle_zone_mode()
         return {"zone": camera_controller.detector.zone_mode}
     return {"zone": False}
+
+@app.post("/set_target")
+def set_target(mode: str):
+    if camera_controller.detector:
+        camera_controller.detector.set_target(mode)
+        return {"target": mode}
+    return {"target": "none"}
+
+
+
+
+@app.post("/arduino_command")
+def arduino_command(cmd: str):
+
+    arduino_manager.send_command(cmd)
+    time.sleep(0.1)
+
+    feedback = arduino_manager.read_feedback()
+
+    return {
+        "sent": cmd,
+        "feedback": feedback
+    }
+
+
 
 

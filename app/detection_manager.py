@@ -98,6 +98,8 @@ import time
 from ultralytics import YOLO
 from app.depth_filters import apply_depth_filters
 from app.network_manager import network_manager
+from app.arduino_manager import arduino_manager
+
 
 MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
 # MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_lily.pt"
@@ -110,6 +112,8 @@ class DetectionManager:
         self.frame = None
         self.confidence = 0.5
         self.zone_mode = False
+        self.target_mode = "rpi"   # default
+
 
 
         # 🔥 GPU / CPU Detection
@@ -345,7 +349,13 @@ class DetectionManager:
                         if len(self.log) > 100:
                             self.log.pop(0)
 
-                        network_manager.send(X_cm, Y_cm, Z_cm)
+                        # network_manager.send(X_cm, Y_cm, Z_cm)
+                        if self.target_mode == "rpi":
+                            network_manager.send(X_cm, Y_cm, Z_cm)
+
+                        elif self.target_mode == "arduino":
+                            arduino_manager.send_coordinate(X_cm, Y_cm, Z_cm)
+
 
                         cv2.putText(
                             color_image,
@@ -368,4 +378,10 @@ class DetectionManager:
     def toggle_zone_mode(self):
         self.zone_mode = not self.zone_mode
         print("Zone Mode:", self.zone_mode)
+
+    ### Target Mode selection---------------
+    def set_target(self, mode):
+        self.target_mode = mode
+        print("Target Mode:", mode)
+
 
