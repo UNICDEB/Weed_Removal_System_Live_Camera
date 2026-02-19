@@ -19,14 +19,30 @@ class NetworkManager:
         except:
             self.connected = False
 
+    # def send(self, x, y, z):
+    #     if not self.connected:
+    #         self.connect()
+    #     if self.connected:
+    #         try:
+    #             data = {"X": x, "Y": y, "Z": z}
+    #             self.client.sendall(json.dumps(data).encode())
+    #         except:
+    #             self.connected = False
+    
+
     def send(self, x, y, z):
+
         if not self.connected:
-            self.connect()
-        if self.connected:
-            try:
-                data = {"X": x, "Y": y, "Z": z}
-                self.client.sendall(json.dumps(data).encode())
-            except:
-                self.connected = False
+            print("Not connected to RPI")
+            return
+
+        try:
+            data = {"X": x, "Y": y, "Z": z}
+            message = json.dumps(data) + "\n"
+            self.client.sendall(message.encode())
+
+        except Exception as e:
+            print("Send error:", e)
+            self.connected = False
 
 network_manager = NetworkManager()
