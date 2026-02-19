@@ -381,7 +381,20 @@ class DetectionManager:
 
     ### Target Mode selection---------------
     def set_target(self, mode):
+
         self.target_mode = mode
+
+        # Disconnect previous
+        if mode == "arduino":
+            if network_manager.connected:
+                network_manager.sock.close()
+                network_manager.connected = False
+
+        elif mode == "rpi":
+            if arduino_manager.connected and arduino_manager.ser:
+                arduino_manager.ser.close()
+                arduino_manager.connected = False
+
         print("Target Mode:", mode)
 
 

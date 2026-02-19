@@ -1,6 +1,7 @@
 import serial
 import threading
 import time
+import socket
 
 class ArduinoManager:
 
@@ -15,38 +16,30 @@ class ArduinoManager:
 
     def connect(self):
         try:
-            if self.ser and self.ser.is_open:
-                self.ser.close()
-
-            self.ser = serial.Serial(
-                self.port,
-                self.baudrate,
-                timeout=1
-            )
-
-            time.sleep(2)  # allow Arduino reset
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.host, self.port))
             self.connected = True
-            print("Arduino Connected")
-
-        except Exception as e:
-            print("Arduino Connection Failed:", e)
+            print("RPI Connected")
+        except:
+            print("Not Connected")
             self.connected = False
+
 
 
     # ----------------------------------
 
     def send_coordinate(self, x, y, z):
 
-        if not self.connected:
-            self.connect()
+                if not self.connected:
+                    self.connect()
 
-        if self.connected:
-            try:
-                msg = f"{x:.2f},{y:.2f},{z:.2f}\n"
-                self.ser.write(msg.encode())
-                print("Sent to Arduino:", msg.strip())
-            except:
-                self.connected = False
+                if self.connected:
+                    try:
+                        msg = f"{x:.2f},{y:.2f},{z:.2f}\n"
+                        self.sock.send(msg.encode())
+                    except:
+                        self.connected = False
+
 
     # ----------------------------------
 

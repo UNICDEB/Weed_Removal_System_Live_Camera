@@ -40,6 +40,30 @@ def video_feed():
     )
 
 
+# @app.get("/status")
+# def get_status():
+
+#     detector = camera_controller.detector
+
+#     if detector is None:
+#         return {
+#             "device": "N/A",
+#             "detection_count": 0,
+#             "receiver": False,
+#             "latest": None,
+#             "log": []
+#         }
+
+#     return {
+#         "device": detector.device.upper(),
+#         "detection_count": detector.detection_count,
+#         "receiver": network_manager.connected,
+#         "latest": detector.latest_result,
+#         "log": detector.log
+#     }
+
+
+
 @app.get("/status")
 def get_status():
 
@@ -49,18 +73,36 @@ def get_status():
         return {
             "device": "N/A",
             "detection_count": 0,
-            "receiver": False,
+            "target": "none",
+            "receiver": "Disconnected",
             "latest": None,
             "log": []
         }
 
+    # 🔥 Determine receiver status properly
+    receiver_status = "Disconnected"
+
+    if detector.target_mode == "arduino":
+        if arduino_manager.connected:
+            receiver_status = "Arduino Connected"
+        else:
+            receiver_status = "Arduino Not Connected"
+
+    elif detector.target_mode == "rpi":
+        if network_manager.connected:
+            receiver_status = "RPI Connected"
+        else:
+            receiver_status = "RPI Not Connected"
+
     return {
         "device": detector.device.upper(),
         "detection_count": detector.detection_count,
-        "receiver": network_manager.connected,
+        "target": detector.target_mode,
+        "receiver": receiver_status,
         "latest": detector.latest_result,
         "log": detector.log
     }
+
 
 @app.post("/toggle_zone")
 def toggle_zone():
