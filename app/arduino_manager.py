@@ -27,26 +27,43 @@ class ArduinoManager:
 
     def connect(self):
 
-        if self.connected:
+        # If already connected and port open → do nothing
+        if self.connected and self.ser and self.ser.is_open:
             return
 
         try:
+            # Auto detect Arduino port
             self.port = self.auto_detect()
 
             if self.port is None:
-                print("Arduino not found")
+                print("❌ Arduino not found")
+                self.connected = False
                 return
 
-            self.ser = serial.Serial(self.port, self.baudrate, timeout=0)
-            time.sleep(2)
+            # Close old connection safely
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+
+            # Open serial
+            self.ser = serial.Serial(
+                self.port,
+                self.baudrate,
+                timeout=0.1   # 🔥 small timeout (important)
+            )
+
+            time.sleep(2)  # Allow Arduino reset
 
             self.connected = True
-            print("Arduino Connected:", self.port)
+            print("✅ Arduino Connected:", self.port)
+
+            # 🔥 Start background reader
+            self.start_reader_thread()
 
         except Exception as e:
-            print("Arduino connection failed:", e)
+            print("❌ Arduino connection failed:", e)
             self.connected = False
 
+    # --------------------
     # ------------------------------
 
     def send_coordinate(self, x, y, z):
@@ -88,6 +105,28 @@ class ArduinoManager:
             self.connected = False
 
         return self.last_response
+
+    # ---------------
+    def start_reader_thread(self):
+
+        def read_loop():
+            print("🔄 Arduino reader thread started")
+
+            while self.connected:
+                try:
+                    if self.ser.in_waiting:
+                        self.last_response = self.ser.readline().decode().strip()
+                        print("📥 Arduino:", self.last_response)
+                except:
+                    self.connected = False
+                    print("⚠ Arduino disconnected")
+                    break
+
+                time.sleep(0.05)
+
+        threading.Thread(target=read_loop, daemon=True).start()
+
+
 
 
 arduino_manager = ArduinoManager()
