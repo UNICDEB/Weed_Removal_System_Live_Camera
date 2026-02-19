@@ -350,11 +350,12 @@ class DetectionManager:
                             self.log.pop(0)
 
                         # network_manager.send(X_cm, Y_cm, Z_cm)
-                        if self.target_mode == "rpi":
+                        if self.target_mode == "arduino" and arduino_manager.connected:
+                            arduino_manager.send_coordinate(X_cm, Y_cm, Z_cm)
+
+                        elif self.target_mode == "rpi" and network_manager.connected:
                             network_manager.send(X_cm, Y_cm, Z_cm)
 
-                        elif self.target_mode == "arduino":
-                            arduino_manager.send_coordinate(X_cm, Y_cm, Z_cm)
 
 
                         cv2.putText(
@@ -383,18 +384,34 @@ class DetectionManager:
     def set_target(self, mode):
 
         self.target_mode = mode
+        print("Target Mode:", mode)
 
-        # Disconnect previous
+        # ---------- Arduino Mode ----------
         if mode == "arduino":
+
+            # Disconnect RPI if connected
             if network_manager.connected:
-                network_manager.sock.close()
+                try:
+                    network_manager.client.close()
+                except:
+                    pass
                 network_manager.connected = False
 
+            arduino_manager.connect()
+
+        # ---------- RPI Mode ----------
         elif mode == "rpi":
-            if arduino_manager.connected and arduino_manager.ser:
-                arduino_manager.ser.close()
+
+            # Disconnect Arduino if connected
+            if arduino_manager.connected:
+                try:
+                    arduino_manager.ser.close()
+                except:
+                    pass
                 arduino_manager.connected = False
 
-        print("Target Mode:", mode)
+            network_manager.connect()
+
+
 
 

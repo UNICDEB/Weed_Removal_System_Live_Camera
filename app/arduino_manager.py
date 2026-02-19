@@ -1,65 +1,92 @@
 import serial
+import serial.tools.list_ports
 import threading
 import time
-import socket
+
 
 class ArduinoManager:
 
     def __init__(self):
         self.ser = None
         self.connected = False
-        self.port = "COM6"      # In my case, if needed then change the com port
+        self.port = None
         self.baudrate = 9600
         self.last_response = ""
+        self.lock = threading.Lock()
 
-    # ----------------------------------
+    # ------------------------------
+
+    def auto_detect(self):
+        ports = serial.tools.list_ports.comports()
+        for p in ports:
+            if "Arduino" in p.description:
+                return p.device
+        return None
+
+    # ------------------------------
 
     def connect(self):
+
+        if self.connected:
+            return
+
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.host, self.port))
+            self.port = self.auto_detect()
+
+            if self.port is None:
+                print("Arduino not found")
+                return
+
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=0)
+            time.sleep(2)
+
             self.connected = True
-            print("RPI Connected")
-        except:
-            print("Not Connected")
+            print("Arduino Connected:", self.port)
+
+        except Exception as e:
+            print("Arduino connection failed:", e)
             self.connected = False
 
-
-
-    # ----------------------------------
+    # ------------------------------
 
     def send_coordinate(self, x, y, z):
 
-                if not self.connected:
-                    self.connect()
+        if not self.connected:
+            return  # 🔥 DO NOT auto connect here
 
-                if self.connected:
-                    try:
-                        msg = f"{x:.2f},{y:.2f},{z:.2f}\n"
-                        self.sock.send(msg.encode())
-                    except:
-                        self.connected = False
+        try:
+            msg = f"{x:.2f},{y:.2f},{z:.2f}\n"
+            with self.lock:
+                self.ser.write(msg.encode())
+        except:
+            self.connected = False
 
-
-    # ----------------------------------
+    # ------------------------------
 
     def send_command(self, cmd):
 
         if not self.connected:
-            self.connect()
+            return
 
-        if self.connected:
-            try:
+        try:
+            with self.lock:
                 self.ser.write((cmd + "\n").encode())
-                print("Command Sent:", cmd)
-            except:
-                self.connected = False
+        except:
+            self.connected = False
 
-    # ----------------------------------
+    # ------------------------------
 
     def read_feedback(self):
-        if self.connected and self.ser.in_waiting:
-            self.last_response = self.ser.readline().decode().strip()
+
+        if not self.connected:
+            return ""
+
+        try:
+            if self.ser.in_waiting:
+                self.last_response = self.ser.readline().decode().strip()
+        except:
+            self.connected = False
+
         return self.last_response
 
 

@@ -217,15 +217,8 @@
                 .then(data => {
 
                     document.getElementById("device").innerText = data.device;
-
-                    document.getElementById("receiver").innerText =
-                        data.receiver ? "Connected" : "Disconnected";
-
-                    document.getElementById("receiver").style.color =
-                        data.receiver ? "green" : "red";
-
-                    document.getElementById("count").innerText =
-                        data.detection_count;
+                    document.getElementById("receiverStatus").innerText = data.receiver;
+                    document.getElementById("count").innerText = data.detection_count;
 
                     if (data.latest) {
                         document.getElementById("latestCoord").innerText =
@@ -243,6 +236,7 @@
                     logBox.scrollTop = logBox.scrollHeight;
                 });
         }
+
 
         function toggleZone() {
             fetch("/toggle_zone", { method: "POST" })
@@ -272,15 +266,7 @@
                 });
         }
 
-        setInterval(() => {
-            fetch("/status")
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById("receiverStatus").innerText = data.receiver;
-                });
-        }, 1000);
-
-
+    
 
         setInterval(updateStatus, 500);
 

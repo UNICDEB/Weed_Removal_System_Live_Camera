@@ -26,11 +26,11 @@ def stop_camera():
     camera_controller.stop()
     return {"status": "Camera Stopped"}
 
-@app.post("/exit")
-def exit_system():
-    camera_controller.stop()
-    import os
-    os._exit(0)
+# @app.post("/exit")
+# def exit_system():
+#     camera_controller.stop()
+#     import os
+#     os._exit(0)
 
 @app.get("/video")
 def video_feed():
@@ -113,10 +113,18 @@ def toggle_zone():
 
 @app.post("/set_target")
 def set_target(mode: str):
+
     if camera_controller.detector:
+
         camera_controller.detector.set_target(mode)
+
+        if mode == "arduino":
+            arduino_manager.connect()
+
         return {"target": mode}
+
     return {"target": "none"}
+
 
 
 

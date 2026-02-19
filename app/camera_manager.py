@@ -42,7 +42,7 @@ class CameraController:
         while True:
 
             if not self.running or self.detector is None:
-                time.sleep(0.1)
+                time.sleep(0.05)
                 continue
 
             frame = self.detector.frame
@@ -51,14 +51,17 @@ class CameraController:
                 time.sleep(0.01)
                 continue
 
-            _, buffer = cv2.imencode(".jpg", frame)
+            ret, buffer = cv2.imencode(".jpg", frame)
             frame_bytes = buffer.tobytes()
 
             yield (b"--frame\r\n"
-                   b"Content-Type: image/jpeg\r\n\r\n" +
-                   frame_bytes +
-                   b"\r\n")
-            
+                b"Content-Type: image/jpeg\r\n\r\n" +
+                frame_bytes +
+                b"\r\n")
+
+            time.sleep(0.01)
+
+
 
 camera_controller = CameraController()
 
