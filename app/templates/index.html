@@ -25,14 +25,20 @@
             font-size: 14px;
         }
 
-        .status-badge {
-            font-size: 14px;
-            padding: 6px 12px;
-        }
-
         .video-box {
             border-radius: 10px;
             border: 1px solid #dee2e6;
+            background: #000;
+        }
+
+        .status-online {
+            color: green;
+            font-weight: bold;
+        }
+
+        .status-offline {
+            color: red;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -64,50 +70,43 @@
                         id="confInput" oninput="syncSlider(this.value)">
 
                     <div class="d-grid gap-2">
-                        <button class="btn btn-success" onclick="startCamera()">
-                            ▶ Open Camera
-                        </button>
-
-                        <button class="btn btn-warning" onclick="stopCamera()">
-                            ⏹ Stop Camera
-                        </button>
-
-                        <button class="btn btn-danger" onclick="exitSystem()">
-                            ❌ Exit System
-                        </button>
-
+                        <button class="btn btn-success" onclick="startCamera()">▶ Open Camera</button>
+                        <button class="btn btn-warning" onclick="stopCamera()">⏹ Stop Camera</button>
+                        <button class="btn btn-danger" onclick="exitSystem()">❌ Exit System</button>
                         <button id="zoneBtn" class="btn btn-primary" onclick="toggleZone()">
                             Enable Zone Mode
                         </button>
-
-                        <div class="card shadow-sm p-3 mb-3">
-                            <h6>📡 Target Selection</h6>
-
-                            <select class="form-select" onchange="setTarget(this.value)">
-                                <option value="rpi">RPI</option>
-                                <option value="arduino">Arduino</option>
-                            </select>
-
-                            <p class="mt-2">Arduino Status:
-                                <span id="arduinoStatus">-</span>
-                            </p>
-
-                        </div>
-
                     </div>
+                </div>
+
+                <!-- Target Selection -->
+                <div class="card shadow-sm p-3 mb-3">
+                    <h6>📡 Target Selection</h6>
+
+                    <select id="targetSelect" class="form-select" onchange="setTarget(this.value)">
+                        <option value="rpi">RPI</option>
+                        <option value="arduino">Arduino</option>
+                    </select>
+
+                    <p class="mt-2">Arduino:
+                        <span id="arduinoStatus" class="status-offline">Disconnected</span>
+                    </p>
+
+                    <p>RPI:
+                        <span id="rpiStatus" class="status-offline">Disconnected</span>
+                    </p>
                 </div>
 
                 <!-- System Info -->
                 <div class="card shadow-sm p-3 mb-3">
-                    <h6 class="text-dark">🖥 System Info</h6>
+                    <h6>🖥 System Info</h6>
                     <p>Device:
                         <span id="device" class="fw-bold text-primary">-</span>
                     </p>
 
-                    <p>Receiver:
-                        <span id="receiverStatus">-</span>
+                    <p>Active Receiver:
+                        <span id="receiverStatus" class="fw-bold">-</span>
                     </p>
-
 
                     <p>Total Detections:
                         <span id="count" class="fw-bold text-success">0</span>
@@ -115,63 +114,43 @@
                 </div>
 
                 <!-- Latest Coordinate -->
-                <div class="card shadow-sm p-3">
-                    <h6 class="text-dark">📍 Latest Coordinate (cm)</h6>
+                <div class="card shadow-sm p-3 mb-3">
+                    <h6>📍 Latest Coordinate (cm)</h6>
                     <p id="latestCoord" class="fw-bold text-secondary">
                         No detection yet
                     </p>
                 </div>
 
-                <div class="card shadow-sm p-3 mb-3">
+                <!-- System Control -->
+                <div class="card shadow-sm p-3">
                     <h6>🎮 System Control</h6>
 
                     <div class="d-grid gap-2">
-
-                        <button class="btn btn-success" onclick="sendCommand('xF')">
-                            ▶ Start (Forward)
-                        </button>
-
-                        <button class="btn btn-danger" onclick="sendCommand('xS')">
-                            ■ Stop
-                        </button>
-
-                        <button class="btn btn-primary" onclick="sendCommand('xH')">
-                            ⬆ Speed Up
-                        </button>
-
-                        <button class="btn btn-secondary" onclick="sendCommand('xL')">
-                            ⬇ Speed Down
-                        </button>
-
+                        <button class="btn btn-success" onclick="sendCommand('xF')">▶ Start</button>
+                        <button class="btn btn-danger" onclick="sendCommand('xS')">■ Stop</button>
+                        <button class="btn btn-primary" onclick="sendCommand('xH')">⬆ Speed Up</button>
+                        <button class="btn btn-secondary" onclick="sendCommand('xL')">⬇ Speed Down</button>
                     </div>
 
                     <p class="mt-2">Arduino Feedback:
                         <span id="arduinoFeedback">-</span>
                     </p>
-
                 </div>
 
             </div>
 
-
-
-
             <!-- RIGHT PANEL -->
             <div class="col-md-8">
 
-                <!-- Live Stream -->
                 <div class="card shadow-sm p-3 mb-3">
-                    <h5 class="text-dark">📷 Live RGB Stream</h5>
-
+                    <h5>📷 Live RGB Stream</h5>
                     <div class="video-box">
                         <img id="video" width="100%" class="img-fluid rounded">
                     </div>
                 </div>
 
-                <!-- Detection Log -->
                 <div class="card shadow-sm p-3">
-                    <h6 class="text-dark">📜 Detection Log</h6>
-
+                    <h6>📜 Detection Log</h6>
                     <div class="log-box" id="logBox"></div>
                 </div>
 
@@ -211,6 +190,34 @@
             fetch("/exit", { method: "POST" });
         }
 
+        function setTarget(mode) {
+            fetch("/set_target?mode=" + mode, { method: "POST" });
+        }
+
+        function sendCommand(cmd) {
+            fetch("/arduino_command?cmd=" + cmd, { method: "POST" })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("arduinoFeedback").innerText =
+                        "Sent: " + data.sent + " | Feedback: " + data.feedback;
+                });
+        }
+
+        function toggleZone() {
+            fetch("/toggle_zone", { method: "POST" })
+                .then(res => res.json())
+                .then(data => {
+                    let btn = document.getElementById("zoneBtn");
+                    if (data.zone) {
+                        btn.innerText = "Disable Zone Mode";
+                        btn.className = "btn btn-secondary";
+                    } else {
+                        btn.innerText = "Enable Zone Mode";
+                        btn.className = "btn btn-primary";
+                    }
+                });
+        }
+
         function updateStatus() {
             fetch("/status")
                 .then(res => res.json())
@@ -219,6 +226,29 @@
                     document.getElementById("device").innerText = data.device;
                     document.getElementById("receiverStatus").innerText = data.receiver;
                     document.getElementById("count").innerText = data.detection_count;
+
+                    // 🔥 SYNC DROPDOWN
+                    document.getElementById("targetSelect").value = data.target;
+
+                    // 🔥 Arduino status
+                    let aStatus = document.getElementById("arduinoStatus");
+                    if (data.arduino_connected) {
+                        aStatus.innerText = "Connected";
+                        aStatus.className = "status-online";
+                    } else {
+                        aStatus.innerText = "Disconnected";
+                        aStatus.className = "status-offline";
+                    }
+
+                    // 🔥 RPI status
+                    let rStatus = document.getElementById("rpiStatus");
+                    if (data.rpi_connected) {
+                        rStatus.innerText = "Connected";
+                        rStatus.className = "status-online";
+                    } else {
+                        rStatus.innerText = "Disconnected";
+                        rStatus.className = "status-offline";
+                    }
 
                     if (data.latest) {
                         document.getElementById("latestCoord").innerText =
@@ -236,37 +266,6 @@
                     logBox.scrollTop = logBox.scrollHeight;
                 });
         }
-
-
-        function toggleZone() {
-            fetch("/toggle_zone", { method: "POST" })
-                .then(res => res.json())
-                .then(data => {
-                    let btn = document.getElementById("zoneBtn");
-                    if (data.zone) {
-                        btn.innerText = "Disable Zone Mode";
-                        btn.className = "btn btn-secondary";
-                    } else {
-                        btn.innerText = "Enable Zone Mode";
-                        btn.className = "btn btn-primary";
-                    }
-                });
-        }
-
-        function setTarget(mode) {
-            fetch("/set_target?mode=" + mode, { method: "POST" });
-        }
-
-        function sendCommand(cmd) {
-            fetch("/arduino_command?cmd=" + cmd, { method: "POST" })
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById("arduinoFeedback").innerText =
-                        "Sent: " + data.sent + " | Feedback: " + data.feedback;
-                });
-        }
-
-    
 
         setInterval(updateStatus, 500);
 
