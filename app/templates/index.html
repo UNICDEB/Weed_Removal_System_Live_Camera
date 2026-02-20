@@ -137,6 +137,10 @@
                     </p>
                 </div>
 
+                <button class="btn btn-dark" onclick="openValueWindow()">
+                    📝 Value Input
+                </button>
+
             </div>
 
             <!-- RIGHT PANEL -->
@@ -252,7 +256,9 @@
 
                     if (data.latest) {
                         document.getElementById("latestCoord").innerText =
-                            `X: ${data.latest.X} cm | Y: ${data.latest.Y} cm | Z: ${data.latest.Z} cm`;
+                            `Start_Z: ${data.latest["Start_Z(m)"]} m | 
+                            End_Z: ${data.latest["End_Z(m)"]} m | 
+                            ${data.latest.CMD_UP} | ${data.latest.CMD_DOWN}`;
                     }
 
                     let logBox = document.getElementById("logBox");
@@ -260,11 +266,21 @@
 
                     data.log.forEach(item => {
                         logBox.innerHTML +=
-                            `X: ${item.X} cm | Y: ${item.Y} cm | Z: ${item.Z} cm<br>`;
+                            `Start_Z: ${item["Start_Z(m)"]} m | 
+                            End_Z: ${item["End_Z(m)"]} m | 
+                            ${item.CMD_UP} | ${item.CMD_DOWN}<br>`;
                     });
 
                     logBox.scrollTop = logBox.scrollHeight;
                 });
+        }
+
+        function openValueWindow() {
+            window.open(
+                "/value_input",
+                "ValueInput",
+                "width=500,height=600,resizable=no"
+            );
         }
 
         setInterval(updateStatus, 500);

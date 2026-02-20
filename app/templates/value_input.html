@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Motion Parameter Setup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background: #f8f9fa;
+        }
+
+        .card {
+            border-radius: 12px;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container py-4">
+
+    <div class="card shadow p-4">
+        <h4 class="text-center mb-4">⚙ Motion Parameter Setup</h4>
+
+        <div class="mb-3">
+            <label class="form-label">Camera Height (m)</label>
+            <input type="number" step="0.01" id="camera_height" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Camera Angle (degree)</label>
+            <input type="number" step="0.1" id="camera_angle" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Tool Distance (m)</label>
+            <input type="number" step="0.01" id="tool_distance" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Speed (m/s)</label>
+            <input type="number" step="0.01" id="speed" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Calibration Time (ms)</label>
+            <input type="number" id="calibration_time" class="form-control">
+        </div>
+
+        <div class="d-grid">
+            <button class="btn btn-success" onclick="saveValues()">
+                ✅ OK
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+function saveValues() {
+
+    const data = {
+        camera_height: parseFloat(document.getElementById("camera_height").value),
+        camera_angle: parseFloat(document.getElementById("camera_angle").value),
+        tool_distance: parseFloat(document.getElementById("tool_distance").value),
+        speed: parseFloat(document.getElementById("speed").value),
+        calibration_time: parseFloat(document.getElementById("calibration_time").value)
+    };
+
+    fetch("/save_motion_config", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(response => {
+        alert("Values Saved Successfully");
+        window.close();
+    });
+
+}
+
+</script>
+
+</body>
+</html>

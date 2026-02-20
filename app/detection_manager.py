@@ -99,10 +99,11 @@ from ultralytics import YOLO
 from app.depth_filters import apply_depth_filters
 from app.network_manager import network_manager
 from app.arduino_manager import arduino_manager
+from app.motion_calculator import generate_motion_commands
 
 
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_debabrata_01.pt"
 MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
-# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_lily.pt"
 
 class DetectionManager:
 
@@ -337,24 +338,68 @@ class DetectionManager:
 
                     if send_allowed:
 
+                        # ---------------------------------------------------
+                        # 🔥 START & END BOUNDING BOX 3D CALCULATION
+                        # ---------------------------------------------------
+
+                        # Starting corner (x1, y1)
+                        start_depth = depth_frame.get_distance(x1, y1)
+
+                        # Ending corner (x2, y2)
+                        end_depth = depth_frame.get_distance(x2, y2)
+
+                        if start_depth == 0 or end_depth == 0:
+                            continue
+
+                        start_point = rs.rs2_deproject_pixel_to_point(
+                            intrin, [x1, y1], start_depth)
+
+                        end_point = rs.rs2_deproject_pixel_to_point(
+                            intrin, [x2, y2], end_depth)
+
+                        # Z in meters
+                        start_z = start_point[2]
+                        end_z = end_point[2]
+
+                        # ---------------------------------------------------
+                        # 🔥 GENERATE MOTION COMMANDS
+                        # ---------------------------------------------------
+                        cmd_up, cmd_down = generate_motion_commands(start_z, end_z)
+
+                        print("Generated Commands:", cmd_up, cmd_down)
+
+                        # ---------------------------------------------------
+                        # 🔥 SEND TO ARDUINO
+                        # ---------------------------------------------------
+                        if self.target_mode == "arduino" and arduino_manager.connected:
+
+                            arduino_manager.send_raw(cmd_up)
+                            time.sleep(0.05)
+                            arduino_manager.send_raw(cmd_down)
+
+                        elif self.target_mode == "rpi":
+                            if not network_manager.connected:
+                                network_manager.connect()
+
+                            if network_manager.connected:
+                                network_manager.send(start_z, end_z, 0)
+
+                        # ---------------------------------------------------
+                        # 🔥 DASHBOARD UPDATE (Optional)
+                        # ---------------------------------------------------
                         self.detection_count += 1
 
                         self.latest_result = {
-                            "X": round(X_cm, 2),
-                            "Y": round(Y_cm, 2),
-                            "Z": round(Z_cm, 2)
+                            "Start_Z(m)": round(start_z, 3),
+                            "End_Z(m)": round(end_z, 3),
+                            "CMD_UP": cmd_up,
+                            "CMD_DOWN": cmd_down
                         }
 
                         self.log.append(self.latest_result)
+
                         if len(self.log) > 100:
                             self.log.pop(0)
-
-                        # network_manager.send(X_cm, Y_cm, Z_cm)
-                        if self.target_mode == "arduino" and arduino_manager.connected:
-                            arduino_manager.send_coordinate(X_cm, Y_cm, Z_cm)
-
-                        elif self.target_mode == "rpi" and network_manager.connected:
-                            network_manager.send(X_cm, Y_cm, Z_cm)
 
 
 

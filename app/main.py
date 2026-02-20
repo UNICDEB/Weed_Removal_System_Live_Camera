@@ -6,6 +6,13 @@ import cv2
 from app.network_manager import network_manager
 from app.arduino_manager import arduino_manager
 import time
+from fastapi import Body
+from app.motion_calculator import update_config, load_config
+from fastapi import Body
+import json
+import os
+from fastapi.responses import HTMLResponse
+from fastapi import Request
 
 
 
@@ -69,30 +76,33 @@ def get_status():
 
     detector = camera_controller.detector
 
+    # 🔴 If detector not initialized
     if detector is None:
         return {
-            "device": "N/A",
+            "device": "NOT INITIALIZED",
             "detection_count": 0,
-            "target": "none",
+            "target": "None",
             "receiver": "Disconnected",
             "latest": None,
-            "log": []
+            "log": [],
+            "arduino_connected": arduino_manager.connected,
+            "rpi_connected": network_manager.connected
         }
 
     # 🔥 Determine receiver status properly
     receiver_status = "Disconnected"
 
     if detector.target_mode == "arduino":
-        if arduino_manager.connected:
-            receiver_status = "Arduino Connected"
-        else:
-            receiver_status = "Arduino Not Connected"
+        receiver_status = (
+            "Arduino Connected" if arduino_manager.connected
+            else "Arduino Not Connected"
+        )
 
     elif detector.target_mode == "rpi":
-        if network_manager.connected:
-            receiver_status = "RPI Connected"
-        else:
-            receiver_status = "RPI Not Connected"
+        receiver_status = (
+            "RPI Connected" if network_manager.connected
+            else "RPI Not Connected"
+        )
 
     return {
         "device": detector.device.upper(),
@@ -100,7 +110,9 @@ def get_status():
         "target": detector.target_mode,
         "receiver": receiver_status,
         "latest": detector.latest_result,
-        "log": detector.log
+        "log": detector.log,
+        "arduino_connected": arduino_manager.connected,
+        "rpi_connected": network_manager.connected
     }
 
 
@@ -152,6 +164,43 @@ def exit_system():
 
     import os
     os._exit(0)
+
+
+
+@app.post("/update_config")
+def update_config_api(data: dict = Body(...)):
+    config = update_config(data)
+    return {"status":"updated", "config": config}
+
+
+CONFIG_FILE = "motion_config.json"
+
+@app.get("/value_input", response_class=HTMLResponse)
+async def value_input_page(request: Request):
+    return templates.TemplateResponse("value_input.html", {"request": request})
+
+
+@app.post("/save_motion_config")
+async def save_motion_config(data: dict = Body(...)):
+
+    # If file exists → load old values
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            old_data = json.load(f)
+    else:
+        old_data = {}
+
+    # Update only provided values
+    for key, value in data.items():
+        if value is not None:
+            old_data[key] = value
+
+    # Save updated file
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(old_data, f, indent=4)
+
+    return {"status": "saved"}
+
 
 
 

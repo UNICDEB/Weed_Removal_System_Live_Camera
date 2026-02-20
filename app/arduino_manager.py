@@ -126,6 +126,16 @@ class ArduinoManager:
 
         threading.Thread(target=read_loop, daemon=True).start()
 
+    def send_raw(self, command):
+
+        if self.connected:
+            try:
+                self.ser.write((command + "\n").encode())
+                print("Sent to Arduino:", command)
+            except Exception as e:
+                print("Arduino Send Error:", e)
+                self.connected = False
+
 
 
 
