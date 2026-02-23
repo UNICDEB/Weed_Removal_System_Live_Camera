@@ -90,6 +90,377 @@
 
 ###################
 
+# import pyrealsense2 as rs
+# import numpy as np
+# import cv2
+# import torch
+# import time
+# from ultralytics import YOLO
+# from app.depth_filters import apply_depth_filters
+# from app.network_manager import network_manager
+# from app.arduino_manager import arduino_manager
+# from app.motion_calculator import generate_motion_commands
+
+
+# # MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_nitu_001(ep-50).pt"
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+
+# class DetectionManager:
+
+#     def __init__(self):
+
+#         self.running = False
+#         self.frame = None
+#         self.confidence = 0.5
+#         self.zone_mode = False
+#         self.target_mode = "rpi"   # default
+        
+
+
+
+#         # 🔥 GPU / CPU Detection
+#         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+#         print("Running on:", self.device.upper())
+
+#         self.model = YOLO(MODEL_PATH)
+#         self.model.to(self.device)
+
+#         # 🔥 Dashboard Variables
+#         self.detection_count = 0
+#         self.latest_result = None
+#         self.log = []
+
+#     # --------------------------------------------------
+
+#     def set_confidence(self, conf):
+#         self.confidence = float(conf)
+
+#     # --------------------------------------------------
+
+#     def stop(self):
+#         self.running = False
+
+#     # --------------------------------------------------
+
+#     def run(self):
+
+#         self.running = True
+
+#         pipeline = rs.pipeline()
+#         config = rs.config()
+
+#         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
+#         config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
+
+#         profile = pipeline.start(config)
+#         align = rs.align(rs.stream.color)
+
+#         print("Camera + Detection Started")
+
+#         try:
+#             # while self.running:
+
+#             #     frames = pipeline.wait_for_frames()
+#             #     aligned = align.process(frames)
+
+#             #     color_frame = aligned.get_color_frame()
+#             #     depth_frame = aligned.get_depth_frame()
+
+#             #     if not color_frame or not depth_frame:
+#             #         continue
+
+#             #     depth_frame = apply_depth_filters(depth_frame)
+
+#             #     color_image = np.asanyarray(color_frame.get_data()).copy()
+
+#             #     # 🔥 YOLO Inference
+#             #     results = self.model(
+#             #         color_image,
+#             #         conf=self.confidence,
+#             #         imgsz=640,
+#             #         device=self.device,
+#             #         verbose=False
+#             #     )
+
+#             #     detection_found = False
+
+#             #     for box in results[0].boxes:
+
+#             #         detection_found = True
+
+#             #         x1, y1, x2, y2 = map(int, box.xyxy[0])
+#             #         center_x = int((x1 + x2) / 2)
+#             #         center_y = int((y1 + y2) / 2)
+
+#             #         depth = depth_frame.get_distance(center_x, center_y)
+#             #         if depth == 0:
+#             #             continue
+
+#             #         intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+#             #         point_3d = rs.rs2_deproject_pixel_to_point(
+#             #             intrin, [center_x, center_y], depth)
+
+#             #         X_cm = point_3d[0] * 100
+#             #         Y_cm = point_3d[1] * 100
+#             #         Z_cm = point_3d[2] * 100
+
+#             #         # 🔥 Draw Box
+#             #         cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#             #         cv2.circle(color_image, (center_x, center_y), 4, (0, 0, 255), -1)
+
+#             #         cv2.putText(
+#             #             color_image,
+#             #             f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
+#             #             (x1, y1 - 10),
+#             #             cv2.FONT_HERSHEY_SIMPLEX,
+#             #             0.6,
+#             #             (255, 0, 0),
+#             #             2
+#             #         )
+
+#             #         # 🔥 Update Dashboard Values
+#             #         self.detection_count += 1
+
+#             #         self.latest_result = {
+#             #             "X": round(X_cm, 2),
+#             #             "Y": round(Y_cm, 2),
+#             #             "Z": round(Z_cm, 2)
+#             #         }
+
+#             #         self.log.append(self.latest_result)
+
+#             #         # Keep only last 100 entries
+#             #         if len(self.log) > 100:
+#             #             self.log.pop(0)
+
+#             #         print("Detected:", self.latest_result)
+
+#             #         # 🔥 Send to Receiver
+#             #         network_manager.send(X_cm, Y_cm, Z_cm)
+
+#             #     # Even if no detection, keep frame updating
+#             #     self.frame = color_image
+
+#             #     time.sleep(0.001)
+
+#             while self.running:
+
+#                 frames = pipeline.wait_for_frames()
+#                 aligned = align.process(frames)
+
+#                 color_frame = aligned.get_color_frame()
+#                 depth_frame = aligned.get_depth_frame()
+
+#                 if not color_frame or not depth_frame:
+#                     continue
+
+#                 depth_frame = apply_depth_filters(depth_frame)
+
+#                 color_image = np.asanyarray(color_frame.get_data()).copy()
+#                 height, width, _ = color_image.shape
+
+#                 results = self.model(
+#                     color_image,
+#                     conf=self.confidence,
+#                     imgsz=640,
+#                     device=self.device,
+#                     verbose=False
+#                 )
+
+#                 intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+
+#                 # ----------------------------------------------------
+#                 # 🔥 ZONE LOGIC
+#                 # ----------------------------------------------------
+#                 left_pixel = None
+#                 right_pixel = None
+
+#                 if self.zone_mode:
+
+#                     Z_ref = 0.5  # 50 cm reference forward
+
+#                     left_point = [-0.15, 0, Z_ref]
+#                     right_point = [0.15, 0, Z_ref]
+
+#                     left_pixel = rs.rs2_project_point_to_pixel(intrin, left_point)
+#                     right_pixel = rs.rs2_project_point_to_pixel(intrin, right_point)
+
+#                     left_x = int(left_pixel[0])
+#                     right_x = int(right_pixel[0])
+
+#                     # Draw vertical lines
+#                     cv2.line(color_image, (left_x, 0), (left_x, height), (255, 0, 0), 2)
+#                     cv2.line(color_image, (right_x, 0), (right_x, height), (255, 0, 0), 2)
+
+#                 # ----------------------------------------------------
+
+#                 for box in results[0].boxes:
+
+#                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+#                     center_x = int((x1 + x2) / 2)
+#                     center_y = int((y1 + y2) / 2)
+
+#                     depth = depth_frame.get_distance(center_x, center_y)
+#                     if depth == 0:
+#                         continue
+
+#                     point_3d = rs.rs2_deproject_pixel_to_point(
+#                         intrin, [center_x, center_y], depth)
+
+#                     X_cm = point_3d[0] * 100
+#                     Y_cm = point_3d[1] * 100
+#                     Z_cm = point_3d[2] * 100
+
+#                     # Draw bounding box
+#                     cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#                     cv2.circle(color_image, (center_x, center_y), 4, (0, 0, 255), -1)
+
+#                     send_allowed = True
+
+#                     # ----------------------------------------------------
+#                     # 🔥 APPLY ZONE FILTER
+#                     # ----------------------------------------------------
+#                     if self.zone_mode:
+
+#                         if center_x < left_x or center_x > right_x:
+#                             send_allowed = False
+
+#                             cv2.putText(
+#                                 color_image,
+#                                 "Outside the Box",
+#                                 (x1, y1 - 25),
+#                                 cv2.FONT_HERSHEY_SIMPLEX,
+#                                 0.7,
+#                                 (0, 0, 255),
+#                                 2
+#                             )
+
+#                     # ----------------------------------------------------
+
+#                     if send_allowed:
+
+#                         # ---------------------------------------------------
+#                         # 🔥 START & END BOUNDING BOX 3D CALCULATION
+#                         # ---------------------------------------------------
+
+#                         # Starting corner (x1, y1)
+#                         start_depth = depth_frame.get_distance(x1, y1)
+
+#                         # Ending corner (x2, y2)
+#                         end_depth = depth_frame.get_distance(x2, y2)
+
+#                         if start_depth == 0 or end_depth == 0:
+#                             continue
+
+#                         start_point = rs.rs2_deproject_pixel_to_point(
+#                             intrin, [x1, y1], start_depth)
+
+#                         end_point = rs.rs2_deproject_pixel_to_point(
+#                             intrin, [x2, y2], end_depth)
+
+#                         # Z in meters
+#                         start_z = start_point[2]
+#                         end_z = end_point[2]
+
+#                         # ---------------------------------------------------
+#                         # 🔥 GENERATE MOTION COMMANDS
+#                         # ---------------------------------------------------
+#                         cmd_up, cmd_down = generate_motion_commands(start_z, end_z)
+
+#                         print("Generated Commands:", cmd_up, cmd_down)
+
+#                         # ---------------------------------------------------
+#                         # 🔥 SEND TO ARDUINO
+#                         # ---------------------------------------------------
+#                         if self.target_mode == "arduino" and arduino_manager.connected:
+
+#                             arduino_manager.send_raw(cmd_up)
+#                             time.sleep(0.05)
+#                             arduino_manager.send_raw(cmd_down)
+
+#                         elif self.target_mode == "rpi":
+#                             if not network_manager.connected:
+#                                 network_manager.connect()
+
+#                             if network_manager.connected:
+#                                 network_manager.send(start_z, end_z, 0)
+
+#                         # ---------------------------------------------------
+#                         # 🔥 DASHBOARD UPDATE (Optional)
+#                         # ---------------------------------------------------
+#                         self.detection_count += 1
+
+#                         self.latest_result = {
+#                             "Start_Z(m)": round(start_z, 3),
+#                             "End_Z(m)": round(end_z, 3),
+#                             "CMD_UP": cmd_up,
+#                             "CMD_DOWN": cmd_down
+#                         }
+
+#                         self.log.append(self.latest_result)
+
+#                         if len(self.log) > 100:
+#                             self.log.pop(0)
+
+
+
+#                         cv2.putText(
+#                             color_image,
+#                             f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
+#                             (x1, y1 - 10),
+#                             cv2.FONT_HERSHEY_SIMPLEX,
+#                             0.6,
+#                             (255, 0, 0),
+#                             2
+#                         )
+
+#                 self.frame = color_image
+
+
+#         finally:
+#             pipeline.stop()
+#             print("Camera Stopped Safely")
+
+
+#     def toggle_zone_mode(self):
+#         self.zone_mode = not self.zone_mode
+#         print("Zone Mode:", self.zone_mode)
+
+#     ### Target Mode selection---------------
+#     def set_target(self, mode):
+
+#         self.target_mode = mode
+#         print("Target Mode:", mode)
+
+#         # ---------- Arduino Mode ----------
+#         if mode == "arduino":
+
+#             # Disconnect RPI if connected
+#             if network_manager.connected:
+#                 try:
+#                     network_manager.client.close()
+#                 except:
+#                     pass
+#                 network_manager.connected = False
+
+#             arduino_manager.connect()
+
+#         # ---------- RPI Mode ----------
+#         elif mode == "rpi":
+
+#             # Disconnect Arduino if connected
+#             if arduino_manager.connected:
+#                 try:
+#                     arduino_manager.ser.close()
+#                 except:
+#                     pass
+#                 arduino_manager.connected = False
+
+#             network_manager.connect()
+
+#############################
+## Date: 23.02.2026
+
 import pyrealsense2 as rs
 import numpy as np
 import cv2
@@ -102,8 +473,9 @@ from app.arduino_manager import arduino_manager
 from app.motion_calculator import generate_motion_commands
 
 
-# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_nitu_001(ep-50).pt"
-MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_nitu_001(ep-50).pt"
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+
 
 class DetectionManager:
 
@@ -113,21 +485,29 @@ class DetectionManager:
         self.frame = None
         self.confidence = 0.5
         self.zone_mode = False
-        self.target_mode = "rpi"   # default
+        self.target_mode = "rpi"
 
-
-
-        # 🔥 GPU / CPU Detection
+        # Device
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print("Running on:", self.device.upper())
 
         self.model = YOLO(MODEL_PATH)
         self.model.to(self.device)
 
-        # 🔥 Dashboard Variables
+        # Dashboard
         self.detection_count = 0
         self.latest_result = None
         self.log = []
+
+        # ---------------------------------------------------
+        # 🔥 DUPLICATE PREVENTION SYSTEM
+        # ---------------------------------------------------
+        self.object_locked = False
+        self.locked_center = None
+        self.locked_z = None
+        self.missed_frames = 0
+        self.max_missed_frames = 15
+        self.lock_distance_threshold = 60  # pixels
 
     # --------------------------------------------------
 
@@ -141,6 +521,22 @@ class DetectionManager:
 
     # --------------------------------------------------
 
+    def is_same_object(self, center_x, center_y):
+
+        if self.locked_center is None:
+            return False
+
+        prev_x, prev_y = self.locked_center
+
+        distance = np.sqrt(
+            (center_x - prev_x) ** 2 +
+            (center_y - prev_y) ** 2
+        )
+
+        return distance < self.lock_distance_threshold
+
+    # --------------------------------------------------
+
     def run(self):
 
         self.running = True
@@ -151,97 +547,12 @@ class DetectionManager:
         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
         config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
 
-        profile = pipeline.start(config)
+        pipeline.start(config)
         align = rs.align(rs.stream.color)
 
         print("Camera + Detection Started")
 
         try:
-            # while self.running:
-
-            #     frames = pipeline.wait_for_frames()
-            #     aligned = align.process(frames)
-
-            #     color_frame = aligned.get_color_frame()
-            #     depth_frame = aligned.get_depth_frame()
-
-            #     if not color_frame or not depth_frame:
-            #         continue
-
-            #     depth_frame = apply_depth_filters(depth_frame)
-
-            #     color_image = np.asanyarray(color_frame.get_data()).copy()
-
-            #     # 🔥 YOLO Inference
-            #     results = self.model(
-            #         color_image,
-            #         conf=self.confidence,
-            #         imgsz=640,
-            #         device=self.device,
-            #         verbose=False
-            #     )
-
-            #     detection_found = False
-
-            #     for box in results[0].boxes:
-
-            #         detection_found = True
-
-            #         x1, y1, x2, y2 = map(int, box.xyxy[0])
-            #         center_x = int((x1 + x2) / 2)
-            #         center_y = int((y1 + y2) / 2)
-
-            #         depth = depth_frame.get_distance(center_x, center_y)
-            #         if depth == 0:
-            #             continue
-
-            #         intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-            #         point_3d = rs.rs2_deproject_pixel_to_point(
-            #             intrin, [center_x, center_y], depth)
-
-            #         X_cm = point_3d[0] * 100
-            #         Y_cm = point_3d[1] * 100
-            #         Z_cm = point_3d[2] * 100
-
-            #         # 🔥 Draw Box
-            #         cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            #         cv2.circle(color_image, (center_x, center_y), 4, (0, 0, 255), -1)
-
-            #         cv2.putText(
-            #             color_image,
-            #             f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
-            #             (x1, y1 - 10),
-            #             cv2.FONT_HERSHEY_SIMPLEX,
-            #             0.6,
-            #             (255, 0, 0),
-            #             2
-            #         )
-
-            #         # 🔥 Update Dashboard Values
-            #         self.detection_count += 1
-
-            #         self.latest_result = {
-            #             "X": round(X_cm, 2),
-            #             "Y": round(Y_cm, 2),
-            #             "Z": round(Z_cm, 2)
-            #         }
-
-            #         self.log.append(self.latest_result)
-
-            #         # Keep only last 100 entries
-            #         if len(self.log) > 100:
-            #             self.log.pop(0)
-
-            #         print("Detected:", self.latest_result)
-
-            #         # 🔥 Send to Receiver
-            #         network_manager.send(X_cm, Y_cm, Z_cm)
-
-            #     # Even if no detection, keep frame updating
-            #     self.frame = color_image
-
-            #     time.sleep(0.001)
-
             while self.running:
 
                 frames = pipeline.wait_for_frames()
@@ -268,16 +579,16 @@ class DetectionManager:
 
                 intrin = depth_frame.profile.as_video_stream_profile().intrinsics
 
+                detection_found_this_frame = False
+
                 # ----------------------------------------------------
-                # 🔥 ZONE LOGIC
+                # ZONE MODE
                 # ----------------------------------------------------
-                left_pixel = None
-                right_pixel = None
+                left_x = right_x = None
 
                 if self.zone_mode:
 
-                    Z_ref = 0.5  # 50 cm reference forward
-
+                    Z_ref = 0.5
                     left_point = [-0.15, 0, Z_ref]
                     right_point = [0.15, 0, Z_ref]
 
@@ -287,10 +598,11 @@ class DetectionManager:
                     left_x = int(left_pixel[0])
                     right_x = int(right_pixel[0])
 
-                    # Draw vertical lines
                     cv2.line(color_image, (left_x, 0), (left_x, height), (255, 0, 0), 2)
                     cv2.line(color_image, (right_x, 0), (right_x, height), (255, 0, 0), 2)
 
+                # ----------------------------------------------------
+                # DETECTION LOOP
                 # ----------------------------------------------------
 
                 for box in results[0].boxes:
@@ -303,6 +615,8 @@ class DetectionManager:
                     if depth == 0:
                         continue
 
+                    detection_found_this_frame = True
+
                     point_3d = rs.rs2_deproject_pixel_to_point(
                         intrin, [center_x, center_y], depth)
 
@@ -310,131 +624,138 @@ class DetectionManager:
                     Y_cm = point_3d[1] * 100
                     Z_cm = point_3d[2] * 100
 
-                    # Draw bounding box
+                    # Draw box
                     cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.circle(color_image, (center_x, center_y), 4, (0, 0, 255), -1)
 
                     send_allowed = True
 
-                    # ----------------------------------------------------
-                    # 🔥 APPLY ZONE FILTER
-                    # ----------------------------------------------------
+                    # Zone filter
                     if self.zone_mode:
-
                         if center_x < left_x or center_x > right_x:
                             send_allowed = False
 
-                            cv2.putText(
-                                color_image,
-                                "Outside the Box",
-                                (x1, y1 - 25),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.7,
-                                (0, 0, 255),
-                                2
-                            )
+                    if not send_allowed:
+                        continue
 
-                    # ----------------------------------------------------
+                    # ---------------------------------------------------
+                    # 🔥 DUPLICATE PREVENTION
+                    # ---------------------------------------------------
 
-                    if send_allowed:
+                    if self.object_locked:
 
-                        # ---------------------------------------------------
-                        # 🔥 START & END BOUNDING BOX 3D CALCULATION
-                        # ---------------------------------------------------
-
-                        # Starting corner (x1, y1)
-                        start_depth = depth_frame.get_distance(x1, y1)
-
-                        # Ending corner (x2, y2)
-                        end_depth = depth_frame.get_distance(x2, y2)
-
-                        if start_depth == 0 or end_depth == 0:
+                        if self.is_same_object(center_x, center_y):
+                            self.missed_frames = 0
                             continue
+                        else:
+                            # New object detected
+                            pass
 
-                        start_point = rs.rs2_deproject_pixel_to_point(
-                            intrin, [x1, y1], start_depth)
+                    # ---------------------------------------------------
+                    # START & END DEPTH
+                    # ---------------------------------------------------
 
-                        end_point = rs.rs2_deproject_pixel_to_point(
-                            intrin, [x2, y2], end_depth)
+                    start_depth = depth_frame.get_distance(x1, y1)
+                    end_depth = depth_frame.get_distance(x2, y2)
 
-                        # Z in meters
-                        start_z = start_point[2]
-                        end_z = end_point[2]
+                    if start_depth == 0 or end_depth == 0:
+                        continue
 
-                        # ---------------------------------------------------
-                        # 🔥 GENERATE MOTION COMMANDS
-                        # ---------------------------------------------------
-                        cmd_up, cmd_down = generate_motion_commands(start_z, end_z)
+                    start_point = rs.rs2_deproject_pixel_to_point(
+                        intrin, [x1, y1], start_depth)
 
-                        print("Generated Commands:", cmd_up, cmd_down)
+                    end_point = rs.rs2_deproject_pixel_to_point(
+                        intrin, [x2, y2], end_depth)
 
-                        # ---------------------------------------------------
-                        # 🔥 SEND TO ARDUINO
-                        # ---------------------------------------------------
-                        if self.target_mode == "arduino" and arduino_manager.connected:
+                    start_z = start_point[2]
+                    end_z = end_point[2]
 
-                            arduino_manager.send_raw(cmd_up)
-                            time.sleep(0.05)
-                            arduino_manager.send_raw(cmd_down)
+                    cmd_up, cmd_down = generate_motion_commands(start_z, end_z)
 
-                        elif self.target_mode == "rpi":
-                            if not network_manager.connected:
-                                network_manager.connect()
+                    print("Generated:", cmd_up, cmd_down)
 
-                            if network_manager.connected:
-                                network_manager.send(start_z, end_z, 0)
+                    # ---------------------------------------------------
+                    # SEND TO TARGET
+                    # ---------------------------------------------------
 
-                        # ---------------------------------------------------
-                        # 🔥 DASHBOARD UPDATE (Optional)
-                        # ---------------------------------------------------
-                        self.detection_count += 1
+                    if self.target_mode == "arduino" and arduino_manager.connected:
 
-                        self.latest_result = {
-                            "Start_Z(m)": round(start_z, 3),
-                            "End_Z(m)": round(end_z, 3),
-                            "CMD_UP": cmd_up,
-                            "CMD_DOWN": cmd_down
-                        }
+                        arduino_manager.send_raw(cmd_up)
+                        time.sleep(0.05)
+                        arduino_manager.send_raw(cmd_down)
 
-                        self.log.append(self.latest_result)
+                    elif self.target_mode == "rpi":
 
-                        if len(self.log) > 100:
-                            self.log.pop(0)
+                        if not network_manager.connected:
+                            network_manager.connect()
 
+                        if network_manager.connected:
+                            network_manager.send(start_z, end_z, 0)
 
+                    # ---------------------------------------------------
+                    # LOCK OBJECT
+                    # ---------------------------------------------------
 
-                        cv2.putText(
-                            color_image,
-                            f"X:{X_cm:.1f} Y:{Y_cm:.1f} Z:{Z_cm:.1f}",
-                            (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6,
-                            (255, 0, 0),
-                            2
-                        )
+                    self.object_locked = True
+                    self.locked_center = (center_x, center_y)
+                    self.locked_z = Z_cm
+                    self.missed_frames = 0
+
+                    # Dashboard update
+                    self.detection_count += 1
+
+                    self.latest_result = {
+                        "Start_Z(m)": round(start_z, 3),
+                        "End_Z(m)": round(end_z, 3),
+                        "CMD_UP": cmd_up,
+                        "CMD_DOWN": cmd_down
+                    }
+
+                    self.log.append(self.latest_result)
+                    if len(self.log) > 100:
+                        self.log.pop(0)
+
+                    break  # 🔥 Only one object per frame
+
+                # ---------------------------------------------------
+                # 🔓 UNLOCK LOGIC
+                # ---------------------------------------------------
+
+                if self.object_locked:
+
+                    if not detection_found_this_frame:
+                        self.missed_frames += 1
+
+                        if self.missed_frames > self.max_missed_frames:
+                            print("Object Unlocked")
+                            self.object_locked = False
+                            self.locked_center = None
+                            self.locked_z = None
+                            self.missed_frames = 0
+                    else:
+                        self.missed_frames = 0
 
                 self.frame = color_image
-
 
         finally:
             pipeline.stop()
             print("Camera Stopped Safely")
 
+    # --------------------------------------------------
 
     def toggle_zone_mode(self):
         self.zone_mode = not self.zone_mode
         print("Zone Mode:", self.zone_mode)
 
-    ### Target Mode selection---------------
+    # --------------------------------------------------
+
     def set_target(self, mode):
 
         self.target_mode = mode
         print("Target Mode:", mode)
 
-        # ---------- Arduino Mode ----------
         if mode == "arduino":
 
-            # Disconnect RPI if connected
             if network_manager.connected:
                 try:
                     network_manager.client.close()
@@ -444,10 +765,8 @@ class DetectionManager:
 
             arduino_manager.connect()
 
-        # ---------- RPI Mode ----------
         elif mode == "rpi":
 
-            # Disconnect Arduino if connected
             if arduino_manager.connected:
                 try:
                     arduino_manager.ser.close()
@@ -456,7 +775,3 @@ class DetectionManager:
                 arduino_manager.connected = False
 
             network_manager.connect()
-
-
-
-
