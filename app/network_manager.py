@@ -2,7 +2,7 @@ import socket
 import json
 
 # SERVER_IP = "10.110.33.154"
-SERVER_IP = "172.18.120.154"
+SERVER_IP = "172.18.120.142"
 PORT = 5000
 
 class NetworkManager:
