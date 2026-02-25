@@ -97,6 +97,107 @@
 ##########################
 # ## Date: 24/02/2026
 
+# import math
+# import json
+# import os
+
+# CONFIG_FILE = "motion_config.json"
+
+
+# # ---------------------------------------------------
+# # CONFIG LOAD
+# # ---------------------------------------------------
+# def load_config():
+#     if not os.path.exists(CONFIG_FILE):
+#         default = {
+#             "camera_height": 0.62,      # meters
+#             "camera_angle": 38.0,       # degrees downward tilt
+#             "tool_distance": 1.10,      # meters (98 cm)
+#             "speed": 0.70,              # m/s
+#             "calibration_time": 0       # milliseconds
+#         }
+#         save_config(default)
+#         return default
+
+#     with open(CONFIG_FILE, "r") as f:
+#         return json.load(f)
+
+
+# # ---------------------------------------------------
+# # CONFIG SAVE
+# # ---------------------------------------------------
+# def save_config(data):
+#     with open(CONFIG_FILE, "w") as f:
+#         json.dump(data, f, indent=4)
+
+
+# # ---------------------------------------------------
+# # UPDATE CONFIG
+# # ---------------------------------------------------
+# def update_config(user_data):
+#     config = load_config()
+
+#     for key in user_data:
+#         if user_data[key] is not None:
+#             config[key] = float(user_data[key])
+
+#     save_config(config)
+#     return config
+
+
+# # ---------------------------------------------------
+# # CORE TIME CALCULATION (TILTED CAMERA VERSION)
+# # ---------------------------------------------------
+# def calculate_time(z_value, config):
+
+#     h = config["camera_height"]          # meters
+#     theta = config["camera_angle"]       # degrees
+#     tool_distance = config["tool_distance"]
+#     speed = config["speed"]
+#     calibration_time = config["calibration_time"]
+
+#     theta_rad = math.radians(theta)
+
+#     # 🔥 Ground distance considering tilt
+#     ground_distance = (z_value * math.cos(theta_rad)) - (h * math.sin(theta_rad))
+
+#     # Total forward travel until tool reaches weed
+#     total_distance = ground_distance + tool_distance
+
+#     if total_distance < 0:
+#         total_distance = 0
+
+#     # Time in milliseconds
+#     time_ms = ((total_distance / speed) * 1000) + calibration_time
+
+#     return int(time_ms)
+
+
+# # ---------------------------------------------------
+# # FORMAT TO 4 DIGIT STRING
+# # ---------------------------------------------------
+# def format_4digit(value):
+#     return str(value).zfill(4)
+
+
+# # ---------------------------------------------------
+# # GENERATE MOTION COMMANDS
+# # ---------------------------------------------------
+# def generate_motion_commands(start_z, end_z):
+
+#     config = load_config()
+
+#     t_start = calculate_time(start_z, config)
+#     t_end = calculate_time(end_z, config)
+
+#     cmd_up = "xU" + format_4digit(t_start)
+#     cmd_down = "xD" + format_4digit(t_end)
+
+#     return cmd_up, cmd_down
+
+########################
+## Date: 25/02/2026
+
 import math
 import json
 import os
@@ -112,9 +213,8 @@ def load_config():
         default = {
             "camera_height": 0.62,      # meters
             "camera_angle": 38.0,       # degrees downward tilt
-            "tool_distance": 1.10,      # meters (98 cm)
-            "speed": 0.70,              # m/s
-            "calibration_time": 0       # milliseconds
+            "tool_distance": 1.10,      # meters (camera to tool horizontal)
+            "depth_tolerance": 0.03     # meters (±3 cm trigger window)
         }
         save_config(default)
         return default
@@ -146,51 +246,55 @@ def update_config(user_data):
 
 
 # ---------------------------------------------------
-# CORE TIME CALCULATION (TILTED CAMERA VERSION)
+# CONVERT DEPTH TO GROUND DISTANCE
+# (Tilt Compensation)
 # ---------------------------------------------------
-def calculate_time(z_value, config):
+def calculate_ground_distance(z_value, config):
 
-    h = config["camera_height"]          # meters
-    theta = config["camera_angle"]       # degrees
-    tool_distance = config["tool_distance"]
-    speed = config["speed"]
-    calibration_time = config["calibration_time"]
+    h = config["camera_height"]
+    theta = config["camera_angle"]
 
     theta_rad = math.radians(theta)
 
-    # 🔥 Ground distance considering tilt
+    # 🔥 Tilt compensated ground projection
     ground_distance = (z_value * math.cos(theta_rad)) - (h * math.sin(theta_rad))
 
-    # Total forward travel until tool reaches weed
-    total_distance = ground_distance + tool_distance
-
-    if total_distance < 0:
-        total_distance = 0
-
-    # Time in milliseconds
-    time_ms = ((total_distance / speed) * 1000) + calibration_time
-
-    return int(time_ms)
+    return ground_distance
 
 
 # ---------------------------------------------------
-# FORMAT TO 4 DIGIT STRING
+# DEPTH-BASED TRIGGER CHECK
 # ---------------------------------------------------
-def format_4digit(value):
-    return str(value).zfill(4)
-
-
-# ---------------------------------------------------
-# GENERATE MOTION COMMANDS
-# ---------------------------------------------------
-def generate_motion_commands(start_z, end_z):
+def check_trigger(z_value):
 
     config = load_config()
 
-    t_start = calculate_time(start_z, config)
-    t_end = calculate_time(end_z, config)
+    tool_distance = config["tool_distance"]
+    tolerance = config["depth_tolerance"]
 
-    cmd_up = "xU" + format_4digit(t_start)
-    cmd_down = "xD" + format_4digit(t_end)
+    ground_distance = calculate_ground_distance(z_value, config)
 
-    return cmd_up, cmd_down
+    # 🔥 Check if weed reached tool position
+    if abs(ground_distance - tool_distance) <= tolerance:
+        return True, ground_distance
+
+    return False, ground_distance
+
+
+# ---------------------------------------------------
+# GENERATE MOTION COMMANDS (PURE POSITION BASED)
+# ---------------------------------------------------
+def generate_motion_commands(start_z, end_z):
+
+    trigger_start, ground_start = check_trigger(start_z)
+    trigger_end, ground_end = check_trigger(end_z)
+
+    if trigger_start or trigger_end:
+
+        # 🔥 Immediate tool actuation (no time delay)
+        cmd_up = "xU0000"
+        cmd_down = "xD0000"
+
+        return cmd_up, cmd_down, ground_start, True
+
+    return None, None, ground_start, False
