@@ -215,8 +215,8 @@ def load_config():
             "camera_angle": 38.0,
             "tool_distance": 1.10,
             "depth_tolerance": 0.03,
-            "up_time_ms": 350,      # calibrated motor up time
-            "down_time_ms": 350     # calibrated motor down time
+            "up_time_ms": 350,
+            "down_time_ms": 350
         }
         save_config(default)
         return default
@@ -225,9 +225,27 @@ def load_config():
         return json.load(f)
 
 
+# ---------------------------------------------------
+# CONFIG SAVE
+# ---------------------------------------------------
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+
+# ---------------------------------------------------
+# UPDATE CONFIG  ✅ (Added Back)
+# ---------------------------------------------------
+def update_config(user_data):
+
+    config = load_config()
+
+    for key in user_data:
+        if user_data[key] is not None:
+            config[key] = float(user_data[key])
+
+    save_config(config)
+    return config
 
 
 # ---------------------------------------------------
@@ -253,7 +271,7 @@ def format_4digit(value):
 
 
 # ---------------------------------------------------
-# DEPTH BASED TRIGGER + FIXED ACTUATION TIME
+# DEPTH BASED TRIGGER + FIXED ACTUATION
 # ---------------------------------------------------
 def generate_motion_commands(start_z, end_z):
 
@@ -264,7 +282,6 @@ def generate_motion_commands(start_z, end_z):
 
     ground_distance = calculate_ground_distance(start_z, config)
 
-    # 🔥 Trigger when weed reaches tool
     if abs(ground_distance - tool_distance) <= tolerance:
 
         up_time = config["up_time_ms"]
