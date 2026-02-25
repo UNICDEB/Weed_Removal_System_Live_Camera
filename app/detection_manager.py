@@ -1044,6 +1044,7 @@ import time
 from ultralytics import YOLO
 
 from app.arduino_manager import arduino_manager
+from app.network_manager import network_manager
 
 
 MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
@@ -1053,11 +1054,12 @@ class DetectionManager:
 
     def __init__(self):
 
+        # -----------------------------
+        # BASIC SYSTEM VARIABLES
+        # -----------------------------
         self.running = False
         self.frame = None
         self.confidence = 0.5
-        self.detection_count = 0
-
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print("Running on:", self.device.upper())
@@ -1065,41 +1067,47 @@ class DetectionManager:
         self.model = YOLO(MODEL_PATH)
         self.model.to(self.device)
 
-        # ----------------------------------
-        # TARGET MODE (RESTORED)
-        # ----------------------------------
-        self.target_mode = "none"   # none | arduino | rpi
+        # -----------------------------
+        # REQUIRED BY main.py
+        # -----------------------------
+        self.detection_count = 0
+        self.latest_result = None
+        self.log = []
+        self.zone_mode = True
+        self.target_mode = "none"
 
-        # ----------------------------------
-        # PIXEL TRIGGERS
-        # ----------------------------------
+        # -----------------------------
+        # PIXEL TRIGGER SETTINGS
+        # -----------------------------
         self.trigger_up_y = 450
         self.trigger_down_y = 620
-
-        # Center zone width (±15cm equivalent in pixels)
-        self.center_zone_half_width = 120  # adjust after calibration
+        self.center_zone_half_width = 120
 
         self.state = "IDLE"
         self.last_trigger_time = 0
         self.cooldown = 0.8
 
-    # -------------------------------------------------
+    # ==========================================================
+    # REQUIRED METHODS (USED BY main.py)
+    # ==========================================================
 
     def set_target(self, mode):
         print("Target mode set to:", mode)
         self.target_mode = mode
 
-    # -------------------------------------------------
+    def toggle_zone_mode(self):
+        self.zone_mode = not self.zone_mode
+        print("Zone Mode:", self.zone_mode)
 
     def set_confidence(self, conf):
         self.confidence = float(conf)
 
-    # -------------------------------------------------
-
     def stop(self):
         self.running = False
 
-    # -------------------------------------------------
+    # ==========================================================
+    # SEND COMMAND
+    # ==========================================================
 
     def send_command(self, command):
 
@@ -1108,12 +1116,12 @@ class DetectionManager:
                 arduino_manager.send_raw(command)
 
         elif self.target_mode == "rpi":
-            print("Send to RPi:", command)
+            if network_manager.connected:
+                network_manager.send(command)
 
-        else:
-            print("No target selected")
-
-    # -------------------------------------------------
+    # ==========================================================
+    # MAIN DETECTION LOOP
+    # ==========================================================
 
     def run(self):
 
@@ -1139,32 +1147,33 @@ class DetectionManager:
 
                 color_image = np.asanyarray(color_frame.get_data())
                 height, width, _ = color_image.shape
-
                 center_x_frame = width // 2
 
-                # ----------------------------------
-                # DRAW VERTICAL CENTER ZONE
-                # ----------------------------------
-
+                # -----------------------------
+                # DRAW CENTER ZONE
+                # -----------------------------
                 left_line = center_x_frame - self.center_zone_half_width
                 right_line = center_x_frame + self.center_zone_half_width
 
-                cv2.line(color_image, (left_line, 0),
-                         (left_line, height), (255, 0, 0), 2)
+                if self.zone_mode:
+                    cv2.line(color_image, (left_line, 0),
+                             (left_line, height), (255, 0, 0), 2)
 
-                cv2.line(color_image, (right_line, 0),
-                         (right_line, height), (255, 0, 0), 2)
+                    cv2.line(color_image, (right_line, 0),
+                             (right_line, height), (255, 0, 0), 2)
 
-                # ----------------------------------
-                # DRAW HORIZONTAL TRIGGER LINES
-                # ----------------------------------
-
+                # -----------------------------
+                # DRAW TRIGGER LINES
+                # -----------------------------
                 cv2.line(color_image, (0, self.trigger_up_y),
                          (width, self.trigger_up_y), (0, 255, 255), 2)
 
                 cv2.line(color_image, (0, self.trigger_down_y),
                          (width, self.trigger_down_y), (0, 0, 255), 2)
 
+                # -----------------------------
+                # YOLO DETECTION
+                # -----------------------------
                 results = self.model(
                     color_image,
                     conf=self.confidence,
@@ -1183,45 +1192,54 @@ class DetectionManager:
 
                     cv2.rectangle(color_image, (x1, y1),
                                   (x2, y2), (0, 255, 0), 2)
+
                     cv2.circle(color_image, (center_x, center_y),
                                4, (0, 0, 255), -1)
 
-                    # ----------------------------------
-                    # CHECK IF INSIDE CENTER ZONE
-                    # ----------------------------------
+                    # Save latest result
+                    self.latest_result = {
+                        "x": center_x,
+                        "y": center_y
+                    }
 
-                    inside_zone = left_line < center_x < right_line
+                    # -----------------------------
+                    # ZONE CHECK
+                    # -----------------------------
+                    if self.zone_mode:
+                        if not (left_line < center_x < right_line):
+                            continue
 
-                    if not inside_zone:
-                        continue
-
-                    # ----------------------------------
+                    # -----------------------------
                     # STATE MACHINE
-                    # ----------------------------------
-
+                    # -----------------------------
                     if (center_y > self.trigger_up_y and
                             self.state == "IDLE" and
                             current_time - self.last_trigger_time > self.cooldown):
 
                         print("LIFT Trigger")
-
                         self.send_command("xU0350")
 
                         self.state = "LIFTED"
                         self.last_trigger_time = current_time
-                        self.detection_count += 1   # 🔥 increment here
+                        self.detection_count += 1
+
+                        self.log.append("LIFT at Y: " + str(center_y))
 
                     elif (center_y > self.trigger_down_y and
                           self.state == "LIFTED"):
 
                         print("DROP Trigger")
-
                         self.send_command("xD0350")
 
                         self.state = "IDLE"
+                        self.log.append("DROP at Y: " + str(center_y))
+
+                    # Limit log size
+                    if len(self.log) > 30:
+                        self.log.pop(0)
 
                 self.frame = color_image
 
         finally:
             pipeline.stop()
-            print("Camera Stopped")
+            print("Camera Stopped Safely")
