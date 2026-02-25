@@ -1055,79 +1055,149 @@ class DetectionManager:
     def __init__(self):
 
         # =============================
-        # BASIC
+        # SYSTEM FLAGS
         # =============================
         self.running = False
         self.frame = None
         self.confidence = 0.5
 
+        # =============================
+        # DEVICE + MODEL
+        # =============================
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print("Running on:", self.device.upper())
-
         self.model = YOLO(MODEL_PATH)
         self.model.to(self.device)
 
         # =============================
-        # REQUIRED BY main.py
+        # TARGET OUTPUT
         # =============================
+        self.target_mode = "none"
         self.detection_count = 0
         self.latest_result = None
-        self.log = []
-        self.zone_mode = True
-        self.target_mode = "none"
 
         # =============================
-        # ZONE SETTINGS (VERTICAL BOX)
+        # LOGGING (for status API)
         # =============================
+        self.log = []
+
+        # =============================
+        # ZONE SETTINGS
+        # =============================
+        self.zone_mode = True
         self.zone_half_width = 120
 
-        # =============================
-        # HORIZONTAL MODE SETTINGS
-        # =============================
-        self.trigger_up_y = 200
-        self.trigger_down_y = 320
+        # Horizontal lines (rectangle)
+        self.top_line_y = 200
+        self.bottom_line_y = 520
 
         # =============================
-        # STATE CONTROL
+        # STABLE STATE MACHINE
         # =============================
-        self.zone_active = False     # True when object inside zone
-        self.horizontal_state = "IDLE"
+        self.zone_active = False
+        self.inside_counter = 0
+        self.outside_counter = 0
+        self.stable_frames = 5
 
-    # ==========================================================
-    # REQUIRED METHODS
-    # ==========================================================
+        # =============================
+        # OBJECT TRACKING MEMORY
+        # =============================
+        self.tracked_objects = {}
+        self.next_object_id = 0
+        self.max_tracking_distance = 80  # pixels
+
+        # =============================
+        # COMMAND LOCK
+        # =============================
+        self.last_command_time = 0
+        self.command_delay = 0.4  # seconds
+
+        # =============================
+        # WEEDER STATE (IMPORTANT)
+        # =============================
+        # Change to "UP" if your system starts physically UP
+        self.weeder_position = "DOWN"
+
+
+    # =====================================================
+    # PUBLIC FUNCTIONS
+    # =====================================================
 
     def set_target(self, mode):
-        print("Target mode set to:", mode)
         self.target_mode = mode
-
-    def toggle_zone_mode(self):
-        self.zone_mode = not self.zone_mode
-        print("Zone Mode:", self.zone_mode)
 
     def set_confidence(self, conf):
         self.confidence = float(conf)
 
+    def toggle_zone_mode(self):
+        self.zone_mode = not self.zone_mode
+        self.reset_state()
+        print("Zone Mode:", self.zone_mode)
+
     def stop(self):
         self.running = False
 
-    # ==========================================================
-    # SEND COMMAND
-    # ==========================================================
+    def reset_state(self):
+        self.zone_active = False
+        self.inside_counter = 0
+        self.outside_counter = 0
+        self.tracked_objects = {}
+        self.next_object_id = 0
+        # ❗ DO NOT reset weeder_position here
 
-    def send_command(self, command):
+
+    # =====================================================
+    # SAFE COMMAND SENDER
+    # =====================================================
+
+    def send_command(self, cmd):
+
+        current_time = time.time()
+
+        if current_time - self.last_command_time < self.command_delay:
+            return
+
+        self.last_command_time = current_time
+
+        print("SEND:", cmd)
 
         if self.target_mode == "arduino":
             if arduino_manager.connected:
-                arduino_manager.send_raw(command)
+                arduino_manager.send_raw(cmd)
 
         elif self.target_mode == "rpi":
             if network_manager.connected:
-                network_manager.send(command)
+                network_manager.send(cmd)
 
-    # ==========================================================
+
+    # =====================================================
+    # SIMPLE CENTER TRACKING
+    # =====================================================
+
+    def track_objects(self, detections):
+
+        updated_objects = {}
+
+        for cx, cy in detections:
+            matched_id = None
+
+            for obj_id, (px, py) in self.tracked_objects.items():
+                dist = np.hypot(cx - px, cy - py)
+                if dist < self.max_tracking_distance:
+                    matched_id = obj_id
+                    break
+
+            if matched_id is None:
+                matched_id = self.next_object_id
+                self.next_object_id += 1
+
+            updated_objects[matched_id] = (cx, cy)
+
+        self.tracked_objects = updated_objects
+
+
+    # =====================================================
     # MAIN LOOP
-    # ==========================================================
+    # =====================================================
 
     def run(self):
 
@@ -1136,134 +1206,143 @@ class DetectionManager:
         pipeline = rs.pipeline()
         config = rs.config()
         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
-
         pipeline.start(config)
 
-        print("Camera + Detection Started")
+        print("Camera Started")
 
         try:
             while self.running:
 
                 frames = pipeline.wait_for_frames()
                 color_frame = frames.get_color_frame()
-
                 if not color_frame:
                     continue
 
-                color_image = np.asanyarray(color_frame.get_data())
-                height, width, _ = color_image.shape
+                frame = np.asanyarray(color_frame.get_data())
+                height, width, _ = frame.shape
 
-                center_frame_x = width // 2
-                left_zone = center_frame_x - self.zone_half_width
-                right_zone = center_frame_x + self.zone_half_width
-
-                detected_inside_zone = False
+                center_x = width // 2
+                left_zone = center_x - self.zone_half_width
+                right_zone = center_x + self.zone_half_width
 
                 # ==========================================
-                # DRAW ZONE IF ENABLED
+                # DRAW ZONE (VERTICAL + HORIZONTAL)
                 # ==========================================
                 if self.zone_mode:
-                    cv2.line(color_image, (left_zone, 0),
+                    # Vertical lines
+                    cv2.line(frame, (left_zone, 0),
                              (left_zone, height), (255, 0, 0), 2)
-
-                    cv2.line(color_image, (right_zone, 0),
+                    cv2.line(frame, (right_zone, 0),
                              (right_zone, height), (255, 0, 0), 2)
-                else:
-                    cv2.line(color_image, (0, self.trigger_up_y),
-                             (width, self.trigger_up_y), (0, 255, 255), 2)
 
-                    cv2.line(color_image, (0, self.trigger_down_y),
-                             (width, self.trigger_down_y), (0, 0, 255), 2)
+                    # Horizontal lines
+                    cv2.line(frame, (0, self.top_line_y),
+                             (width, self.top_line_y), (0, 255, 255), 2)
+                    cv2.line(frame, (0, self.bottom_line_y),
+                             (width, self.bottom_line_y), (0, 0, 255), 2)
+
+                    # Rectangle
+                    cv2.rectangle(
+                        frame,
+                        (left_zone, self.top_line_y),
+                        (right_zone, self.bottom_line_y),
+                        (0, 255, 0),
+                        2
+                    )
 
                 # ==========================================
                 # YOLO DETECTION
                 # ==========================================
                 results = self.model(
-                    color_image,
+                    frame,
                     conf=self.confidence,
                     imgsz=640,
                     device=self.device,
                     verbose=False
                 )
 
+                detections = []
+
                 for box in results[0].boxes:
-
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    center_x = int((x1 + x2) / 2)
-                    center_y = int((y1 + y2) / 2)
+                    cx = (x1 + x2) // 2
+                    cy = (y1 + y2) // 2
 
-                    cv2.rectangle(color_image, (x1, y1),
+                    detections.append((cx, cy))
+
+                    cv2.rectangle(frame, (x1, y1),
                                   (x2, y2), (0, 255, 0), 2)
-
-                    cv2.circle(color_image, (center_x, center_y),
+                    cv2.circle(frame, (cx, cy),
                                4, (0, 0, 255), -1)
 
-                    self.latest_result = {
-                        "x": center_x,
-                        "y": center_y
-                    }
+                # ==========================================
+                # TRACK OBJECTS
+                # ==========================================
+                self.track_objects(detections)
 
-                    # ==========================================
-                    # ZONE MODE LOGIC (RECTANGLE ENTER / EXIT)
-                    # ==========================================
-                    if self.zone_mode:
+                # ==========================================
+                # ZONE LOGIC (RECTANGLE BASED)
+                # ==========================================
+                object_inside = False
 
-                        inside = left_zone < center_x < right_zone
+                for cx, cy in self.tracked_objects.values():
+                    if (left_zone < cx < right_zone and
+                        self.top_line_y < cy < self.bottom_line_y):
+                        object_inside = True
+                        break
 
-                        if inside:
-                            detected_inside_zone = True
+                if self.zone_mode:
 
-                        # ENTER EVENT
-                        if inside and not self.zone_active:
-                            print("ZONE ENTER → UP")
-                            self.send_command("xU0350")
-                            self.zone_active = True
-                            self.detection_count += 1
-                            self.log.append("UP (Zone Enter)")
-
-                        # EXIT EVENT
-                        if not inside and self.zone_active:
-                            print("ZONE EXIT → DOWN")
-                            self.send_command("xD0350")
-                            self.zone_active = False
-                            self.log.append("DOWN (Zone Exit)")
-
-                    # ==========================================
-                    # HORIZONTAL MODE LOGIC
-                    # ==========================================
+                    if object_inside:
+                        self.inside_counter += 1
+                        self.outside_counter = 0
                     else:
+                        self.outside_counter += 1
+                        self.inside_counter = 0
 
-                        # CROSS UP LINE
-                        if (center_y > self.trigger_up_y and
-                                self.horizontal_state == "IDLE"):
+                    # =============================
+                    # ENTER ZONE → UP (STATE AWARE)
+                    # =============================
+                    if (self.inside_counter >= self.stable_frames
+                            and not self.zone_active):
 
-                            print("HORIZONTAL UP")
+                        if self.weeder_position == "DOWN":
+                            msg = "ZONE ENTER → UP"
+                            print(msg)
+                            self.log.append(msg)
+
                             self.send_command("xU0350")
-                            self.horizontal_state = "WAIT_DOWN"
+                            self.weeder_position = "UP"
                             self.detection_count += 1
-                            self.log.append("UP (Horizontal)")
+                        else:
+                            msg = "ZONE ENTER → already UP (ignored)"
+                            print(msg)
+                            self.log.append(msg)
 
-                        # CROSS DOWN LINE
-                        elif (center_y > self.trigger_down_y and
-                              self.horizontal_state == "WAIT_DOWN"):
+                        self.zone_active = True
 
-                            print("HORIZONTAL DOWN")
+                    # =============================
+                    # EXIT ZONE → DOWN (STATE AWARE)
+                    # =============================
+                    if (self.outside_counter >= self.stable_frames
+                            and self.zone_active):
+
+                        if self.weeder_position == "UP":
+                            msg = "ZONE EXIT → DOWN"
+                            print(msg)
+                            self.log.append(msg)
+
                             self.send_command("xD0350")
-                            self.horizontal_state = "IDLE"
-                            self.log.append("DOWN (Horizontal)")
+                            self.weeder_position = "DOWN"
+                        else:
+                            msg = "ZONE EXIT → already DOWN (ignored)"
+                            print(msg)
+                            self.log.append(msg)
 
-                # If no object inside zone → trigger exit
-                if self.zone_mode and self.zone_active and not detected_inside_zone:
-                    print("ZONE FULL EXIT → DOWN")
-                    self.send_command("xD0350")
-                    self.zone_active = False
-                    self.log.append("DOWN (Lost Object)")
+                        self.zone_active = False
 
-                if len(self.log) > 30:
-                    self.log.pop(0)
-
-                self.frame = color_image
+                self.frame = frame
 
         finally:
             pipeline.stop()
-            print("Camera Stopped Safely")
+            print("Camera Stopped")

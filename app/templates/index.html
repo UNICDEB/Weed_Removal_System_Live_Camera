@@ -111,6 +111,9 @@
                     <p>Total Detections:
                         <span id="count" class="fw-bold text-success">0</span>
                     </p>
+                    <p>Weeder Position:
+                        <span id="weederState" class="fw-bold">-</span>
+                    </p>
                 </div>
 
                 <!-- Latest Coordinate -->
@@ -135,6 +138,21 @@
                     <p class="mt-2">Arduino Feedback:
                         <span id="arduinoFeedback">-</span>
                     </p>
+
+                    <hr>
+
+                    <h6>🛠 Manual Weeder Control</h6>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-success" onclick="weederUp()">
+                            ⬆ Weeder UP
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="weederDown()">
+                            ⬇ Weeder DOWN
+                        </button>
+                    </div>
+
+                    <p class="mt-2 fw-bold" id="weederMsg"></p>
                 </div>
 
                 <button class="btn btn-dark" onclick="openValueWindow()">
@@ -227,14 +245,42 @@
                 .then(res => res.json())
                 .then(data => {
 
-                    document.getElementById("device").innerText = data.device;
-                    document.getElementById("receiverStatus").innerText = data.receiver;
-                    document.getElementById("count").innerText = data.detection_count;
+                    // =========================
+                    // BASIC SYSTEM INFO
+                    // =========================
+                    document.getElementById("device").innerText =
+                        data.device || "-";
 
-                    // 🔥 SYNC DROPDOWN
-                    document.getElementById("targetSelect").value = data.target;
+                    document.getElementById("receiverStatus").innerText =
+                        data.receiver || "-";
 
-                    // 🔥 Arduino status
+                    document.getElementById("count").innerText =
+                        data.detection_count ?? 0;
+
+                    // =========================
+                    // WEEDER POSITION
+                    // =========================
+                    let weederState = document.getElementById("weederState");
+                    weederState.innerText = data.weeder_position || "-";
+
+                    // Color indication
+                    if (data.weeder_position === "UP") {
+                        weederState.style.color = "green";
+                    } else if (data.weeder_position === "DOWN") {
+                        weederState.style.color = "red";
+                    } else {
+                        weederState.style.color = "gray";
+                    }
+
+                    // =========================
+                    // TARGET MODE SYNC
+                    // =========================
+                    document.getElementById("targetSelect").value =
+                        data.target || "rpi";
+
+                    // =========================
+                    // ARDUINO STATUS
+                    // =========================
                     let aStatus = document.getElementById("arduinoStatus");
                     if (data.arduino_connected) {
                         aStatus.innerText = "Connected";
@@ -244,7 +290,9 @@
                         aStatus.className = "status-offline";
                     }
 
-                    // 🔥 RPI status
+                    // =========================
+                    // RPI STATUS
+                    // =========================
                     let rStatus = document.getElementById("rpiStatus");
                     if (data.rpi_connected) {
                         rStatus.innerText = "Connected";
@@ -254,24 +302,38 @@
                         rStatus.className = "status-offline";
                     }
 
+                    // =========================
+                    // LATEST COORDINATE
+                    // =========================
                     if (data.latest) {
                         document.getElementById("latestCoord").innerText =
-                            `Start_Z: ${data.latest["Start_Z(m)"]} m | 
-                            End_Z: ${data.latest["End_Z(m)"]} m | 
-                            ${data.latest.CMD_UP} | ${data.latest.CMD_DOWN}`;
+                            `Start_Z: ${data.latest["Start_Z(m)"]} m | ` +
+                            `End_Z: ${data.latest["End_Z(m)"]} m | ` +
+                            `${data.latest.CMD_UP} | ${data.latest.CMD_DOWN}`;
+                    } else {
+                        document.getElementById("latestCoord").innerText =
+                            "No detection yet";
                     }
 
+                    // =========================
+                    // LOG DISPLAY
+                    // =========================
                     let logBox = document.getElementById("logBox");
                     logBox.innerHTML = "";
 
-                    data.log.forEach(item => {
-                        logBox.innerHTML +=
-                            `Start_Z: ${item["Start_Z(m)"]} m | 
-                            End_Z: ${item["End_Z(m)"]} m | 
-                            ${item.CMD_UP} | ${item.CMD_DOWN}<br>`;
-                    });
+                    if (Array.isArray(data.log)) {
+                        data.log.forEach(item => {
+                            logBox.innerHTML +=
+                                `Start_Z: ${item["Start_Z(m)"]} m | ` +
+                                `End_Z: ${item["End_Z(m)"]} m | ` +
+                                `${item.CMD_UP} | ${item.CMD_DOWN}<br>`;
+                        });
+                    }
 
                     logBox.scrollTop = logBox.scrollHeight;
+                })
+                .catch(err => {
+                    console.error("Status update failed:", err);
                 });
         }
 
@@ -282,6 +344,27 @@
                 "width=500,height=600,resizable=no"
             );
         }
+
+        function weederUp() {
+            fetch("/weeder/up", { method: "POST" })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("weederMsg").innerText = data.msg;
+                    document.getElementById("weederMsg").style.color =
+                        (data.status === "ok") ? "green" : "orange";
+                });
+        }
+
+        function weederDown() {
+            fetch("/weeder/down", { method: "POST" })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("weederMsg").innerText = data.msg;
+                    document.getElementById("weederMsg").style.color =
+                        (data.status === "ok") ? "green" : "orange";
+                });
+        }
+
 
         setInterval(updateStatus, 500);
 

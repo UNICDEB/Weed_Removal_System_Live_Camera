@@ -23,8 +23,15 @@ templates = Jinja2Templates(directory="app/templates")
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+# @app.post("/start")
+# def start_camera(conf: float):
+#     camera_controller.start(conf)
+#     return {"status": "Camera Started"}
+
 @app.post("/start")
 def start_camera(conf: float):
+    camera_controller.stop()
+    time.sleep(0.2)
     camera_controller.start(conf)
     return {"status": "Camera Started"}
 
@@ -200,6 +207,40 @@ async def save_motion_config(data: dict = Body(...)):
         json.dump(old_data, f, indent=4)
 
     return {"status": "saved"}
+
+
+@app.post("/weeder/up")
+def manual_weeder_up():
+
+    detector = camera_controller.detector
+    if detector is None:
+        return {"status": "error", "msg": "Camera not started"}
+
+    if detector.weeder_position == "UP":
+        return {"status": "ignored", "msg": "Weeder already UP"}
+
+    detector.send_command("xU0350")
+    detector.weeder_position = "UP"
+    detector.log.append("MANUAL → UP")
+
+    return {"status": "ok", "msg": "Weeder moved UP"}
+
+
+@app.post("/weeder/down")
+def manual_weeder_down():
+
+    detector = camera_controller.detector
+    if detector is None:
+        return {"status": "error", "msg": "Camera not started"}
+
+    if detector.weeder_position == "DOWN":
+        return {"status": "ignored", "msg": "Weeder already DOWN"}
+
+    detector.send_command("xD0350")
+    detector.weeder_position = "DOWN"
+    detector.log.append("MANUAL → DOWN")
+
+    return {"status": "ok", "msg": "Weeder moved DOWN"}
 
 
 
