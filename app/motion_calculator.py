@@ -213,7 +213,7 @@ def load_config():
         "camera_height": 0.62,
         "camera_angle": 38.0,
         "tool_distance": 1.10,
-        "depth_tolerance": 0.03,
+        "depth_tolerance": 0.10,
         "up_time_ms": 350,
         "down_time_ms": 350
     }
@@ -284,26 +284,21 @@ def format_4digit(value):
 # ---------------------------------------------------
 def generate_motion_commands(start_z, end_z):
 
-    config = load_config()   # safe for now
+    config = load_config()
 
-    tool_distance = config["tool_distance"]
-    tolerance = config["depth_tolerance"]
+    trigger_z = config["trigger_z"]
+    tolerance = config["z_tolerance"]
 
-    ground_distance = calculate_ground_distance(start_z, config)
+    current_z = (start_z + end_z) / 2
 
-    if abs(ground_distance - tool_distance) <= tolerance:
+    print("Current Z:", round(current_z,3), "Trigger Z:", trigger_z)
 
-        up_time = config["up_time_ms"]
-        down_time = config["down_time_ms"]
+    # 🔥 increasing depth trigger
+    if current_z >= (trigger_z - tolerance):
 
-        cmd_up = "xU" + format_4digit(up_time)
-        cmd_down = "xD" + format_4digit(down_time)
-
-    
+        cmd_up = "xU" + str(config["up_time_ms"]).zfill(4)
+        cmd_down = "xD" + str(config["down_time_ms"]).zfill(4)
 
         return cmd_up, cmd_down
-    print("Ground:", round(ground_distance,3),
-      "Tool:", tool_distance,
-      "Diff:", round(abs(ground_distance - tool_distance),3))
 
     return None, None
