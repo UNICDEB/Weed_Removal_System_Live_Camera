@@ -211,10 +211,12 @@ CONFIG_FILE = "motion_config.json"
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         default = {
-            "camera_height": 0.62,      # meters
-            "camera_angle": 38.0,       # degrees downward tilt
-            "tool_distance": 1.10,      # meters (camera to tool horizontal)
-            "depth_tolerance": 0.03     # meters (±3 cm trigger window)
+            "camera_height": 0.62,
+            "camera_angle": 38.0,
+            "tool_distance": 1.10,
+            "depth_tolerance": 0.03,
+            "up_time_ms": 350,      # calibrated motor up time
+            "down_time_ms": 350     # calibrated motor down time
         }
         save_config(default)
         return default
@@ -223,31 +225,13 @@ def load_config():
         return json.load(f)
 
 
-# ---------------------------------------------------
-# CONFIG SAVE
-# ---------------------------------------------------
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
 
 # ---------------------------------------------------
-# UPDATE CONFIG
-# ---------------------------------------------------
-def update_config(user_data):
-    config = load_config()
-
-    for key in user_data:
-        if user_data[key] is not None:
-            config[key] = float(user_data[key])
-
-    save_config(config)
-    return config
-
-
-# ---------------------------------------------------
-# CONVERT DEPTH TO GROUND DISTANCE
-# (Tilt Compensation)
+# TILT COMPENSATION
 # ---------------------------------------------------
 def calculate_ground_distance(z_value, config):
 
@@ -256,45 +240,39 @@ def calculate_ground_distance(z_value, config):
 
     theta_rad = math.radians(theta)
 
-    # 🔥 Tilt compensated ground projection
     ground_distance = (z_value * math.cos(theta_rad)) - (h * math.sin(theta_rad))
 
     return ground_distance
 
 
 # ---------------------------------------------------
-# DEPTH-BASED TRIGGER CHECK
+# FORMAT 4 DIGIT
 # ---------------------------------------------------
-def check_trigger(z_value):
+def format_4digit(value):
+    return str(int(value)).zfill(4)
+
+
+# ---------------------------------------------------
+# DEPTH BASED TRIGGER + FIXED ACTUATION TIME
+# ---------------------------------------------------
+def generate_motion_commands(start_z, end_z):
 
     config = load_config()
 
     tool_distance = config["tool_distance"]
     tolerance = config["depth_tolerance"]
 
-    ground_distance = calculate_ground_distance(z_value, config)
+    ground_distance = calculate_ground_distance(start_z, config)
 
-    # 🔥 Check if weed reached tool position
+    # 🔥 Trigger when weed reaches tool
     if abs(ground_distance - tool_distance) <= tolerance:
-        return True, ground_distance
 
-    return False, ground_distance
+        up_time = config["up_time_ms"]
+        down_time = config["down_time_ms"]
 
+        cmd_up = "xU" + format_4digit(up_time)
+        cmd_down = "xD" + format_4digit(down_time)
 
-# ---------------------------------------------------
-# GENERATE MOTION COMMANDS (PURE POSITION BASED)
-# ---------------------------------------------------
-def generate_motion_commands(start_z, end_z):
+        return cmd_up, cmd_down, True
 
-    trigger_start, ground_start = check_trigger(start_z)
-    trigger_end, ground_end = check_trigger(end_z)
-
-    if trigger_start or trigger_end:
-
-        # 🔥 Immediate tool actuation (no time delay)
-        cmd_up = "xU0000"
-        cmd_down = "xD0000"
-
-        return cmd_up, cmd_down, ground_start, True
-
-    return None, None, ground_start, False
+    return None, None, False
