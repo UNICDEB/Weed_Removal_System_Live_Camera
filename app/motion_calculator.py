@@ -110,10 +110,10 @@ CONFIG_FILE = "motion_config.json"
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         default = {
-            "camera_height": 0.45,      # meters
-            "camera_angle": 20.0,       # degrees downward tilt
-            "tool_distance": 0.98,      # meters (98 cm)
-            "speed": 0.35,              # m/s
+            "camera_height": 0.62,      # meters
+            "camera_angle": 38.0,       # degrees downward tilt
+            "tool_distance": 1.10,      # meters (98 cm)
+            "speed": 0.70,              # m/s
             "calibration_time": 0       # milliseconds
         }
         save_config(default)

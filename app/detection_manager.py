@@ -474,6 +474,7 @@ from app.arduino_manager import arduino_manager
 from app.motion_calculator import generate_motion_commands
 
 #  MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_nitu_001(ep-50).pt"
+#  MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_trl_fld_debu(25_02_26).pt"
 MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
 
 

@@ -10,7 +10,8 @@ class ArduinoManager:
         self.ser = None
         self.connected = False
         self.port = None
-        self.baudrate = 9600
+        # self.baudrate = 9600
+        self.baudrate = 115200
         self.last_response = ""
         self.lock = threading.Lock()
 
