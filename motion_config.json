@@ -3,5 +3,8 @@
     "camera_angle": 0.0,
     "tool_distance": 0.2,
     "speed": 0.5,
-    "calibration_time": 0
+    "calibration_time": 0,
+    "depth_tolerance": 0.03,
+    "up_time_ms": 350,
+    "down_time_ms": 350
 }

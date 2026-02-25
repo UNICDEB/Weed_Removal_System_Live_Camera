@@ -205,13 +205,11 @@ import os
 CONFIG_FILE = "motion_config.json"
 
 # ---------------------------------------------------
-# LOAD CONFIG ONCE (CACHE)
+# LOAD CONFIG (ONCE)
 # ---------------------------------------------------
-if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "r") as f:
-        CONFIG = json.load(f)
-else:
-    CONFIG = {
+def load_config():
+
+    default = {
         "camera_height": 0.62,
         "camera_angle": 38.0,
         "tool_distance": 1.10,
@@ -219,32 +217,53 @@ else:
         "up_time_ms": 350,
         "down_time_ms": 350
     }
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
+
+    if not os.path.exists(CONFIG_FILE):
+        save_config(default)
+        return default
+
+    with open(CONFIG_FILE, "r") as f:
+        config = json.load(f)
+
+    # 🔥 Auto-add missing keys
+    for key in default:
+        if key not in config:
+            config[key] = default[key]
+
+    save_config(config)
+
+    return config
 
 
 # ---------------------------------------------------
-# UPDATE CONFIG (optional, for UI)
+# SAVE CONFIG
+# ---------------------------------------------------
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+# ---------------------------------------------------
+# UPDATE CONFIG
 # ---------------------------------------------------
 def update_config(user_data):
-    global CONFIG
+    config = load_config()
+
     for key in user_data:
         if user_data[key] is not None:
-            CONFIG[key] = float(user_data[key])
+            config[key] = float(user_data[key])
 
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-
-    return CONFIG
+    save_config(config)
+    return config
 
 
 # ---------------------------------------------------
 # TILT COMPENSATION
 # ---------------------------------------------------
-def calculate_ground_distance(z_value):
+def calculate_ground_distance(z_value, config):
 
-    h = CONFIG["camera_height"]
-    theta = CONFIG["camera_angle"]
+    h = config["camera_height"]
+    theta = config["camera_angle"]
 
     theta_rad = math.radians(theta)
 
@@ -265,20 +284,26 @@ def format_4digit(value):
 # ---------------------------------------------------
 def generate_motion_commands(start_z, end_z):
 
-    tool_distance = CONFIG["tool_distance"]
-    tolerance = CONFIG["depth_tolerance"]
+    config = load_config()   # safe for now
 
-    ground_distance = calculate_ground_distance(start_z)
+    tool_distance = config["tool_distance"]
+    tolerance = config["depth_tolerance"]
 
-    # Depth-based trigger
+    ground_distance = calculate_ground_distance(start_z, config)
+
     if abs(ground_distance - tool_distance) <= tolerance:
 
-        up_time = CONFIG["up_time_ms"]
-        down_time = CONFIG["down_time_ms"]
+        up_time = config["up_time_ms"]
+        down_time = config["down_time_ms"]
 
         cmd_up = "xU" + format_4digit(up_time)
         cmd_down = "xD" + format_4digit(down_time)
 
+    
+
         return cmd_up, cmd_down
+    print("Ground:", round(ground_distance,3),
+      "Tool:", tool_distance,
+      "Diff:", round(abs(ground_distance - tool_distance),3))
 
     return None, None

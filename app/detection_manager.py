@@ -677,27 +677,30 @@ class DetectionManager:
 
                         cmd_up, cmd_down = generate_motion_commands(start_z, end_z)
 
-                        # SEND COMMAND
-                        if self.target_mode == "arduino" and arduino_manager.connected:
-                            arduino_manager.send_raw(cmd_up)
-                            time.sleep(0.05)
-                            arduino_manager.send_raw(cmd_down)
+                        # Only proceed if valid commands generated
+                        if cmd_up is not None and cmd_down is not None:
 
-                        elif self.target_mode == "rpi":
-                            if network_manager.connected:
-                                network_manager.send(start_z, end_z, 0)
+                            if self.target_mode == "arduino" and arduino_manager.connected:
+                                arduino_manager.send_raw(cmd_up)
+                                time.sleep(0.05)
+                                arduino_manager.send_raw(cmd_down)
 
-                        # Dashboard update
-                        self.detection_count += 1
-                        self.latest_result = {
-                            "Z(m)": round(Z, 3),
-                            "CMD_UP": cmd_up,
-                            "CMD_DOWN": cmd_down
-                        }
+                            elif self.target_mode == "rpi":
+                                if network_manager.connected:
+                                    network_manager.send(start_z, end_z, 0)
 
-                        self.log.append(self.latest_result)
-                        if len(self.log) > 100:
-                            self.log.pop(0)
+                            # Update dashboard ONLY when valid trigger
+                            self.detection_count += 1
+                            self.latest_result = {
+                                "Start_Z(m)": round(start_z, 3),
+                                "End_Z(m)": round(end_z, 3),
+                                "CMD_UP": cmd_up,
+                                "CMD_DOWN": cmd_down
+                            }
+
+                            self.log.append(self.latest_result)
+                            if len(self.log) > 100:
+                                self.log.pop(0)
 
                     # ----------------------------------------------------
                     # 🔥 UNLOCK LOGIC
