@@ -863,6 +863,31 @@ class DetectionManager:
                 intrin = depth_frame.profile.as_video_stream_profile().intrinsics
 
                 # --------------------------------------------------------
+                # ZONE CALCULATION (15cm left-right from center)
+                # --------------------------------------------------------
+
+                left_x = None
+                right_x = None
+
+                if self.zone_mode:
+
+                    Z_ref = 1.0  # reference depth (1 meter)
+
+                    # 15 cm left & right in real world
+                    left_point = [-0.15, 0, Z_ref]
+                    right_point = [0.15, 0, Z_ref]
+
+                    left_pixel = rs.rs2_project_point_to_pixel(intrin, left_point)
+                    right_pixel = rs.rs2_project_point_to_pixel(intrin, right_point)
+
+                    left_x = int(left_pixel[0])
+                    right_x = int(right_pixel[0])
+
+                    # Draw vertical lines
+                    cv2.line(color_image, (left_x, 0), (left_x, height), (255, 0, 0), 2)
+                    cv2.line(color_image, (right_x, 0), (right_x, height), (255, 0, 0), 2)
+
+                # --------------------------------------------------------
                 # Process detections
                 # --------------------------------------------------------
 
@@ -871,6 +896,14 @@ class DetectionManager:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     center_x = int((x1 + x2) / 2)
                     center_y = int((y1 + y2) / 2)
+
+                    # --------------------------------------------------------
+                    # ZONE FILTER
+                    # --------------------------------------------------------
+
+                    if self.zone_mode:
+                        if center_x < left_x or center_x > right_x:
+                            continue
 
                     # Get CENTER depth (stable)
                     depth = depth_frame.get_distance(center_x, center_y)

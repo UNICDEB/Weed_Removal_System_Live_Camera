@@ -205,32 +205,41 @@ import os
 CONFIG_FILE = "motion_config.json"
 
 # ---------------------------------------------------
-# LOAD CONFIG (ONCE)
+# DEFAULT CONFIG
 # ---------------------------------------------------
+
+DEFAULT_CONFIG = {
+    "camera_height": 0.62,      # meters
+    "camera_angle": 38.0,       # degrees
+    "tool_distance": 1.10,      # meters from camera to tool
+    "trigger_z": 0.80,          # trigger depth (meters)
+    "z_tolerance": 0.05,        # trigger tolerance
+    "up_time_ms": 350,          # Arduino up time
+    "down_time_ms": 350         # Arduino down time
+}
+
+# ---------------------------------------------------
+# LOAD CONFIG
+# ---------------------------------------------------
+
 def load_config():
 
-    default = {
-        "camera_height": 0.62,
-        "camera_angle": 38.0,
-        "tool_distance": 1.10,
-        "depth_tolerance": 0.10,
-        "up_time_ms": 350,
-        "down_time_ms": 350
-    }
-
     if not os.path.exists(CONFIG_FILE):
-        save_config(default)
-        return default
+        save_config(DEFAULT_CONFIG)
+        return DEFAULT_CONFIG.copy()
 
     with open(CONFIG_FILE, "r") as f:
         config = json.load(f)
 
-    # 🔥 Auto-add missing keys
-    for key in default:
+    # Auto-add missing keys
+    updated = False
+    for key in DEFAULT_CONFIG:
         if key not in config:
-            config[key] = default[key]
+            config[key] = DEFAULT_CONFIG[key]
+            updated = True
 
-    save_config(config)
+    if updated:
+        save_config(config)
 
     return config
 
@@ -238,6 +247,7 @@ def load_config():
 # ---------------------------------------------------
 # SAVE CONFIG
 # ---------------------------------------------------
+
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=4)
@@ -246,11 +256,13 @@ def save_config(data):
 # ---------------------------------------------------
 # UPDATE CONFIG
 # ---------------------------------------------------
+
 def update_config(user_data):
+
     config = load_config()
 
     for key in user_data:
-        if user_data[key] is not None:
+        if key in config and user_data[key] is not None:
             config[key] = float(user_data[key])
 
     save_config(config)
@@ -260,6 +272,7 @@ def update_config(user_data):
 # ---------------------------------------------------
 # TILT COMPENSATION
 # ---------------------------------------------------
+
 def calculate_ground_distance(z_value, config):
 
     h = config["camera_height"]
@@ -275,6 +288,7 @@ def calculate_ground_distance(z_value, config):
 # ---------------------------------------------------
 # FORMAT TO 4 DIGIT STRING
 # ---------------------------------------------------
+
 def format_4digit(value):
     return str(int(value)).zfill(4)
 
@@ -282,23 +296,36 @@ def format_4digit(value):
 # ---------------------------------------------------
 # GENERATE MOTION COMMANDS
 # ---------------------------------------------------
+
 def generate_motion_commands(start_z, end_z):
 
-    config = load_config()
+    try:
+        config = load_config()
 
-    trigger_z = config["trigger_z"]
-    tolerance = config["z_tolerance"]
+        trigger_z = config["trigger_z"]
+        tolerance = config["z_tolerance"]
 
-    current_z = (start_z + end_z) / 2
+        # Use average Z
+        current_z = (start_z + end_z) / 2
 
-    print("Current Z:", round(current_z,3), "Trigger Z:", trigger_z)
+        print(f"Current Z: {round(current_z,3)} | Trigger Z: {trigger_z}")
 
-    # 🔥 increasing depth trigger
-    if current_z >= (trigger_z - tolerance):
+        # -------------------------------------------------
+        # Trigger Condition
+        # -------------------------------------------------
 
-        cmd_up = "xU" + str(config["up_time_ms"]).zfill(4)
-        cmd_down = "xD" + str(config["down_time_ms"]).zfill(4)
+        if current_z >= (trigger_z - tolerance):
 
-        return cmd_up, cmd_down
+            up_time = format_4digit(config["up_time_ms"])
+            down_time = format_4digit(config["down_time_ms"])
 
-    return None, None
+            cmd_up = "xU" + up_time
+            cmd_down = "xD" + down_time
+
+            return cmd_up, cmd_down
+
+        return None, None
+
+    except Exception as e:
+        print("Motion Calculator Error:", e)
+        return None, None

@@ -6,5 +6,7 @@
     "calibration_time": 0,
     "depth_tolerance": 0.03,
     "up_time_ms": 350,
-    "down_time_ms": 350
+    "down_time_ms": 350,
+    "trigger_z": 0.8,
+    "z_tolerance": 0.05
 }
