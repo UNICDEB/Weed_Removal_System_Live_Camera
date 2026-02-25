@@ -1056,6 +1056,8 @@ class DetectionManager:
         self.running = False
         self.frame = None
         self.confidence = 0.5
+        self.detection_count = 0
+
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print("Running on:", self.device.upper())
@@ -1064,27 +1066,54 @@ class DetectionManager:
         self.model.to(self.device)
 
         # ----------------------------------
-        # PIXEL TRIGGER SETTINGS
+        # TARGET MODE (RESTORED)
         # ----------------------------------
+        self.target_mode = "none"   # none | arduino | rpi
 
-        self.trigger_up_y = 450     # Adjust after testing
-        self.trigger_down_y = 620   # Adjust after testing
+        # ----------------------------------
+        # PIXEL TRIGGERS
+        # ----------------------------------
+        self.trigger_up_y = 450
+        self.trigger_down_y = 620
 
-        self.state = "IDLE"         # IDLE → LIFTED
+        # Center zone width (±15cm equivalent in pixels)
+        self.center_zone_half_width = 120  # adjust after calibration
+
+        self.state = "IDLE"
         self.last_trigger_time = 0
-        self.cooldown = 0.8         # seconds
+        self.cooldown = 0.8
 
-    # ------------------------------------------
+    # -------------------------------------------------
+
+    def set_target(self, mode):
+        print("Target mode set to:", mode)
+        self.target_mode = mode
+
+    # -------------------------------------------------
 
     def set_confidence(self, conf):
         self.confidence = float(conf)
 
-    # ------------------------------------------
+    # -------------------------------------------------
 
     def stop(self):
         self.running = False
 
-    # ------------------------------------------
+    # -------------------------------------------------
+
+    def send_command(self, command):
+
+        if self.target_mode == "arduino":
+            if arduino_manager.connected:
+                arduino_manager.send_raw(command)
+
+        elif self.target_mode == "rpi":
+            print("Send to RPi:", command)
+
+        else:
+            print("No target selected")
+
+    # -------------------------------------------------
 
     def run(self):
 
@@ -1092,12 +1121,11 @@ class DetectionManager:
 
         pipeline = rs.pipeline()
         config = rs.config()
-
         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
 
         pipeline.start(config)
 
-        print("Camera + Pixel Detection Started")
+        print("Camera + Detection Started")
 
         try:
 
@@ -1112,8 +1140,23 @@ class DetectionManager:
                 color_image = np.asanyarray(color_frame.get_data())
                 height, width, _ = color_image.shape
 
+                center_x_frame = width // 2
+
                 # ----------------------------------
-                # Draw Trigger Lines
+                # DRAW VERTICAL CENTER ZONE
+                # ----------------------------------
+
+                left_line = center_x_frame - self.center_zone_half_width
+                right_line = center_x_frame + self.center_zone_half_width
+
+                cv2.line(color_image, (left_line, 0),
+                         (left_line, height), (255, 0, 0), 2)
+
+                cv2.line(color_image, (right_line, 0),
+                         (right_line, height), (255, 0, 0), 2)
+
+                # ----------------------------------
+                # DRAW HORIZONTAL TRIGGER LINES
                 # ----------------------------------
 
                 cv2.line(color_image, (0, self.trigger_up_y),
@@ -1121,10 +1164,6 @@ class DetectionManager:
 
                 cv2.line(color_image, (0, self.trigger_down_y),
                          (width, self.trigger_down_y), (0, 0, 255), 2)
-
-                # ----------------------------------
-                # YOLO Detection
-                # ----------------------------------
 
                 results = self.model(
                     color_image,
@@ -1142,37 +1181,42 @@ class DetectionManager:
                     center_x = int((x1 + x2) / 2)
                     center_y = int((y1 + y2) / 2)
 
-                    # Draw detection
                     cv2.rectangle(color_image, (x1, y1),
                                   (x2, y2), (0, 255, 0), 2)
                     cv2.circle(color_image, (center_x, center_y),
                                4, (0, 0, 255), -1)
 
                     # ----------------------------------
-                    # STATE MACHINE LOGIC
+                    # CHECK IF INSIDE CENTER ZONE
                     # ----------------------------------
 
-                    # LIFT CONDITION
+                    inside_zone = left_line < center_x < right_line
+
+                    if not inside_zone:
+                        continue
+
+                    # ----------------------------------
+                    # STATE MACHINE
+                    # ----------------------------------
+
                     if (center_y > self.trigger_up_y and
                             self.state == "IDLE" and
                             current_time - self.last_trigger_time > self.cooldown):
 
                         print("LIFT Trigger")
 
-                        if arduino_manager.connected:
-                            arduino_manager.send_raw("xU0350")
+                        self.send_command("xU0350")
 
                         self.state = "LIFTED"
                         self.last_trigger_time = current_time
+                        self.detection_count += 1   # 🔥 increment here
 
-                    # DROP CONDITION
                     elif (center_y > self.trigger_down_y and
                           self.state == "LIFTED"):
 
                         print("DROP Trigger")
 
-                        if arduino_manager.connected:
-                            arduino_manager.send_raw("xD0350")
+                        self.send_command("xD0350")
 
                         self.state = "IDLE"
 
@@ -1180,4 +1224,4 @@ class DetectionManager:
 
         finally:
             pipeline.stop()
-            print("Camera Stopped Safely")
+            print("Camera Stopped")
