@@ -1055,7 +1055,7 @@ class DetectionManager:
     def __init__(self):
 
         # =============================
-        # BASIC SYSTEM VARIABLES
+        # BASIC
         # =============================
         self.running = False
         self.frame = None
@@ -1077,22 +1077,24 @@ class DetectionManager:
         self.target_mode = "none"
 
         # =============================
-        # TRIGGER SETTINGS (TOP SIDE)
+        # ZONE SETTINGS (VERTICAL BOX)
         # =============================
-        self.trigger_up_y = 200      # First trigger line
-        self.trigger_down_y = 320    # Second trigger line
-
-        self.center_zone_half_width = 120  # ± pixels from center
+        self.zone_half_width = 120
 
         # =============================
-        # STATE MACHINE
+        # HORIZONTAL MODE SETTINGS
         # =============================
-        self.state = "IDLE"
-        self.last_trigger_time = 0
-        self.cooldown = 1.0  # slow vehicle → safe delay
+        self.trigger_up_y = 200
+        self.trigger_down_y = 320
+
+        # =============================
+        # STATE CONTROL
+        # =============================
+        self.zone_active = False     # True when object inside zone
+        self.horizontal_state = "IDLE"
 
     # ==========================================================
-    # REQUIRED METHODS FOR main.py
+    # REQUIRED METHODS
     # ==========================================================
 
     def set_target(self, mode):
@@ -1124,7 +1126,7 @@ class DetectionManager:
                 network_manager.send(command)
 
     # ==========================================================
-    # MAIN DETECTION LOOP
+    # MAIN LOOP
     # ==========================================================
 
     def run(self):
@@ -1152,31 +1154,30 @@ class DetectionManager:
                 height, width, _ = color_image.shape
 
                 center_frame_x = width // 2
-                left_zone = center_frame_x - self.center_zone_half_width
-                right_zone = center_frame_x + self.center_zone_half_width
+                left_zone = center_frame_x - self.zone_half_width
+                right_zone = center_frame_x + self.zone_half_width
 
-                # =============================
-                # DRAW CENTER ZONE
-                # =============================
+                detected_inside_zone = False
+
+                # ==========================================
+                # DRAW ZONE IF ENABLED
+                # ==========================================
                 if self.zone_mode:
                     cv2.line(color_image, (left_zone, 0),
                              (left_zone, height), (255, 0, 0), 2)
 
                     cv2.line(color_image, (right_zone, 0),
                              (right_zone, height), (255, 0, 0), 2)
+                else:
+                    cv2.line(color_image, (0, self.trigger_up_y),
+                             (width, self.trigger_up_y), (0, 255, 255), 2)
 
-                # =============================
-                # DRAW HORIZONTAL TRIGGER LINES (TOP SIDE)
-                # =============================
-                cv2.line(color_image, (0, self.trigger_up_y),
-                         (width, self.trigger_up_y), (0, 255, 255), 2)
+                    cv2.line(color_image, (0, self.trigger_down_y),
+                             (width, self.trigger_down_y), (0, 0, 255), 2)
 
-                cv2.line(color_image, (0, self.trigger_down_y),
-                         (width, self.trigger_down_y), (0, 0, 255), 2)
-
-                # =============================
+                # ==========================================
                 # YOLO DETECTION
-                # =============================
+                # ==========================================
                 results = self.model(
                     color_image,
                     conf=self.confidence,
@@ -1185,66 +1186,81 @@ class DetectionManager:
                     verbose=False
                 )
 
-                current_time = time.time()
-
                 for box in results[0].boxes:
 
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-
                     center_x = int((x1 + x2) / 2)
                     center_y = int((y1 + y2) / 2)
 
-                    # Draw bounding box
                     cv2.rectangle(color_image, (x1, y1),
                                   (x2, y2), (0, 255, 0), 2)
 
                     cv2.circle(color_image, (center_x, center_y),
                                4, (0, 0, 255), -1)
 
-                    # Save latest detection
                     self.latest_result = {
                         "x": center_x,
                         "y": center_y
                     }
 
-                    # =============================
-                    # ZONE CHECK
-                    # =============================
+                    # ==========================================
+                    # ZONE MODE LOGIC (RECTANGLE ENTER / EXIT)
+                    # ==========================================
                     if self.zone_mode:
-                        if not (left_zone < center_x < right_zone):
-                            continue
 
-                    # =============================
-                    # STATE MACHINE (SLOW VEHICLE)
-                    # =============================
+                        inside = left_zone < center_x < right_zone
 
-                    # 1️⃣ CROSS UP LINE
-                    if (center_y > self.trigger_up_y and
-                            self.state == "IDLE" and
-                            current_time - self.last_trigger_time > self.cooldown):
+                        if inside:
+                            detected_inside_zone = True
 
-                        print("UP Trigger")
-                        self.send_command("xU0350")
+                        # ENTER EVENT
+                        if inside and not self.zone_active:
+                            print("ZONE ENTER → UP")
+                            self.send_command("xU0350")
+                            self.zone_active = True
+                            self.detection_count += 1
+                            self.log.append("UP (Zone Enter)")
 
-                        self.state = "WAIT_DOWN"
-                        self.last_trigger_time = current_time
-                        self.detection_count += 1
+                        # EXIT EVENT
+                        if not inside and self.zone_active:
+                            print("ZONE EXIT → DOWN")
+                            self.send_command("xD0350")
+                            self.zone_active = False
+                            self.log.append("DOWN (Zone Exit)")
 
-                        self.log.append(f"UP at Y: {center_y}")
+                    # ==========================================
+                    # HORIZONTAL MODE LOGIC
+                    # ==========================================
+                    else:
 
-                    # 2️⃣ CROSS DOWN LINE
-                    elif (center_y > self.trigger_down_y and
-                          self.state == "WAIT_DOWN"):
+                        # CROSS UP LINE
+                        if (center_y > self.trigger_up_y and
+                                self.horizontal_state == "IDLE"):
 
-                        print("DOWN Trigger")
-                        self.send_command("xD0350")
+                            print("HORIZONTAL UP")
+                            self.send_command("xU0350")
+                            self.horizontal_state = "WAIT_DOWN"
+                            self.detection_count += 1
+                            self.log.append("UP (Horizontal)")
 
-                        self.state = "IDLE"
-                        self.log.append(f"DOWN at Y: {center_y}")
+                        # CROSS DOWN LINE
+                        elif (center_y > self.trigger_down_y and
+                              self.horizontal_state == "WAIT_DOWN"):
 
-                    # Limit log size
-                    if len(self.log) > 30:
-                        self.log.pop(0)
+                            print("HORIZONTAL DOWN")
+                            self.send_command("xD0350")
+                            self.horizontal_state = "IDLE"
+                            self.log.append("DOWN (Horizontal)")
+
+                # If no object inside zone → trigger exit
+                if self.zone_mode and self.zone_active and not detected_inside_zone:
+                    print("ZONE FULL EXIT → DOWN")
+                    self.send_command("xD0350")
+                    self.zone_active = False
+                    self.log.append("DOWN (Lost Object)")
+
+                if len(self.log) > 30:
+                    self.log.pop(0)
 
                 self.frame = color_image
 
