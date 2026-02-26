@@ -11,12 +11,14 @@ from app.network_manager import network_manager
 from app.arduino_manager import arduino_manager
 from app.motion_calculator import update_config
 
+# 🔥 SINGLE SOURCE OF TRUTH (DO NOT REDEFINE)
+from app.detection_manager import CMD_WEEDER_UP, CMD_WEEDER_DOWN
 
 # =====================================================
-# HARDWARE COMMAND MAPPING (MATCH REAL MOTION)
+# HARDWARE COMMAND MAPPING (SOURCE OF TRUTH)
 # =====================================================
-CMD_WEEDER_UP = "xD0350"     # 🔥 physically moves UP
-CMD_WEEDER_DOWN = "xU0350"   # 🔥 physically moves DOWN
+CMD_WEEDER_UP = "xU0000"     # ✅ physically moves UP
+CMD_WEEDER_DOWN = "xD0000"   # ✅ physically moves DOWN
 
 
 # =====================================================
@@ -165,7 +167,7 @@ def manual_weeder_up():
     if detector.weeder_position == "UP":
         return {"status": "ignored", "msg": "Weeder already UP"}
 
-    detector.send_command(CMD_WEEDER_UP)
+    detector.send_command(CMD_WEEDER_UP)   # 🔥 sends xU0000
     detector.weeder_position = "UP"
     detector.log.append("MANUAL → UP")
 
@@ -182,7 +184,7 @@ def manual_weeder_down():
     if detector.weeder_position == "DOWN":
         return {"status": "ignored", "msg": "Weeder already DOWN"}
 
-    detector.send_command(CMD_WEEDER_DOWN)
+    detector.send_command(CMD_WEEDER_DOWN)  # 🔥 sends xD0000
     detector.weeder_position = "DOWN"
     detector.log.append("MANUAL → DOWN")
 

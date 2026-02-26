@@ -1036,6 +1036,229 @@
 #####################
 ##  Updated Version
 
+# import pyrealsense2 as rs
+# import numpy as np
+# import cv2
+# import torch
+# import time
+# from ultralytics import YOLO
+
+# from app.arduino_manager import arduino_manager
+# from app.network_manager import network_manager
+
+
+# # MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best.pt"
+
+# # =============================
+# # HARDWARE COMMAND MAPPING
+# # (MATCHES REAL MOTION)
+# # =============================
+# CMD_WEEDER_UP = "xU0000"     # 🔥 physically moves UP
+# CMD_WEEDER_DOWN = "xD0000"   # 🔥 physically moves DOWN
+
+
+# class DetectionManager:
+
+#     def __init__(self):
+
+#         self.running = False
+#         self.frame = None
+#         self.confidence = 0.5
+
+#         # Device + model
+#         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+#         self.model = YOLO(MODEL_PATH)
+#         self.model.to(self.device)
+
+#         # Output
+#         self.target_mode = "none"
+#         self.detection_count = 0
+#         self.latest_result = None
+#         self.log = []
+
+#         # Zone
+#         self.zone_mode = True
+#         self.zone_half_width = 120
+#         self.top_line_y = 200
+#         self.bottom_line_y = 520
+
+#         # Stability
+#         self.zone_active = False
+#         self.inside_counter = 0
+#         self.outside_counter = 0
+#         self.stable_frames = 5
+
+#         # Tracking
+#         self.tracked_objects = {}
+#         self.next_object_id = 0
+#         self.max_tracking_distance = 80
+
+#         # Command lock
+#         self.last_command_time = 0
+#         self.command_delay = 0.4
+
+#         # =============================
+#         # WEEDER STATE (SOURCE OF TRUTH)
+#         # =============================
+#         self.weeder_position = "DOWN"   # change if machine starts UP
+
+
+#     # -----------------------------
+#     def set_target(self, mode):
+#         self.target_mode = mode
+
+#     def set_confidence(self, conf):
+#         self.confidence = float(conf)
+
+#     def toggle_zone_mode(self):
+#         self.zone_mode = not self.zone_mode
+#         self.reset_state()
+
+#     def stop(self):
+#         self.running = False
+
+#     def reset_state(self):
+#         self.zone_active = False
+#         self.inside_counter = 0
+#         self.outside_counter = 0
+#         self.tracked_objects.clear()
+#         self.next_object_id = 0
+
+
+#     # -----------------------------
+#     def send_command(self, cmd):
+
+#         if time.time() - self.last_command_time < self.command_delay:
+#             return
+
+#         self.last_command_time = time.time()
+#         print("SEND:", cmd)
+
+#         if self.target_mode == "arduino" and arduino_manager.connected:
+#             arduino_manager.send_raw(cmd)
+
+#         elif self.target_mode == "rpi" and network_manager.connected:
+#             network_manager.send(cmd)
+
+
+#     # -----------------------------
+#     def track_objects(self, detections):
+
+#         updated = {}
+
+#         for cx, cy in detections:
+#             matched = None
+#             for oid, (px, py) in self.tracked_objects.items():
+#                 if np.hypot(cx - px, cy - py) < self.max_tracking_distance:
+#                     matched = oid
+#                     break
+
+#             if matched is None:
+#                 matched = self.next_object_id
+#                 self.next_object_id += 1
+
+#             updated[matched] = (cx, cy)
+
+#         self.tracked_objects = updated
+
+
+#     # -----------------------------
+#     def run(self):
+
+#         self.running = True
+
+#         pipeline = rs.pipeline()
+#         config = rs.config()
+#         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
+#         pipeline.start(config)
+
+#         try:
+#             while self.running:
+
+#                 frames = pipeline.wait_for_frames()
+#                 color_frame = frames.get_color_frame()
+#                 if not color_frame:
+#                     continue
+
+#                 frame = np.asanyarray(color_frame.get_data())
+#                 h, w, _ = frame.shape
+
+#                 cx_frame = w // 2
+#                 left = cx_frame - self.zone_half_width
+#                 right = cx_frame + self.zone_half_width
+
+#                 # Draw zone
+#                 if self.zone_mode:
+#                     cv2.rectangle(
+#                         frame,
+#                         (left, self.top_line_y),
+#                         (right, self.bottom_line_y),
+#                         (0, 255, 0),
+#                         2
+#                     )
+
+#                 # YOLO
+#                 results = self.model(
+#                     frame,
+#                     conf=self.confidence,
+#                     imgsz=640,
+#                     device=self.device,
+#                     verbose=False
+#                 )
+
+#                 detections = []
+#                 for box in results[0].boxes:
+#                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+#                     cx = (x1 + x2) // 2
+#                     cy = (y1 + y2) // 2
+#                     detections.append((cx, cy))
+
+#                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#                     cv2.circle(frame, (cx, cy), 4, (0, 0, 255), -1)
+
+#                 self.track_objects(detections)
+
+#                 inside = False
+#                 for cx, cy in self.tracked_objects.values():
+#                     if left < cx < right and self.top_line_y < cy < self.bottom_line_y:
+#                         inside = True
+#                         break
+
+#                 if inside:
+#                     self.inside_counter += 1
+#                     self.outside_counter = 0
+#                 else:
+#                     self.outside_counter += 1
+#                     self.inside_counter = 0
+
+#                 # ENTER → UP
+#                 if self.inside_counter >= self.stable_frames and not self.zone_active:
+#                     if self.weeder_position == "DOWN":
+#                         self.send_command(CMD_WEEDER_UP)
+#                         self.weeder_position = "UP"
+#                         self.log.append("AI → UP")
+#                         self.detection_count += 1
+#                     self.zone_active = True
+
+#                 # EXIT → DOWN
+#                 if self.outside_counter >= self.stable_frames and self.zone_active:
+#                     if self.weeder_position == "UP":
+#                         self.send_command(CMD_WEEDER_DOWN)
+#                         self.weeder_position = "DOWN"
+#                         self.log.append("AI → DOWN")
+#                     self.zone_active = False
+
+#                 self.frame = frame
+
+#         finally:
+#             pipeline.stop()
+#             print("Camera stopped")
+
+
+####################
+### Updated_One
+
 import pyrealsense2 as rs
 import numpy as np
 import cv2
@@ -1047,63 +1270,81 @@ from app.arduino_manager import arduino_manager
 from app.network_manager import network_manager
 
 
-MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best_nitu_001(ep-50).pt"
+MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/best.pt"
+# MODEL_PATH = "E:/Debabrata/Weed/Weed_Removal_Syatem_Using_AI/Weight/yolo11s.pt"
 
-# =============================
-# HARDWARE COMMAND MAPPING
-# (MATCHES REAL MOTION)
-# =============================
-CMD_WEEDER_UP = "xD0350"     # 🔥 physically moves UP
-CMD_WEEDER_DOWN = "xU0350"   # 🔥 physically moves DOWN
+# =====================================================
+# HARDWARE COMMAND MAPPING (SOURCE OF TRUTH)
+# =====================================================
+CMD_WEEDER_UP = "xU0000"     # ✅ physically moves UP
+CMD_WEEDER_DOWN = "xD0000"   # ✅ physically moves DOWN
 
 
 class DetectionManager:
 
     def __init__(self):
 
+        # =============================
+        # SYSTEM STATE
+        # =============================
         self.running = False
         self.frame = None
         self.confidence = 0.5
 
-        # Device + model
+        # =============================
+        # DEVICE + MODEL
+        # =============================
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = YOLO(MODEL_PATH)
         self.model.to(self.device)
 
-        # Output
+        # =============================
+        # OUTPUT / STATUS
+        # =============================
         self.target_mode = "none"
         self.detection_count = 0
         self.latest_result = None
         self.log = []
 
-        # Zone
+        # =============================
+        # ZONE CONFIG (SMALL + TOP)
+        # =============================
         self.zone_mode = True
-        self.zone_half_width = 120
-        self.top_line_y = 200
-        self.bottom_line_y = 520
+        self.zone_width_ratio = 0.25
+        self.zone_height_ratio = 0.25
+        self.zone_top_offset_ratio = 0.12
 
-        # Stability
+        # =============================
+        # STABILITY
+        # =============================
         self.zone_active = False
         self.inside_counter = 0
         self.outside_counter = 0
         self.stable_frames = 5
 
-        # Tracking
+        # =============================
+        # TRACKING
+        # =============================
         self.tracked_objects = {}
         self.next_object_id = 0
         self.max_tracking_distance = 80
 
-        # Command lock
+        # =============================
+        # COMMAND LOCK
+        # =============================
         self.last_command_time = 0
         self.command_delay = 0.4
 
         # =============================
         # WEEDER STATE (SOURCE OF TRUTH)
         # =============================
-        self.weeder_position = "DOWN"   # change if machine starts UP
+        self.weeder_position = "DOWN"   # set correctly at startup
 
 
-    # -----------------------------
+    # =====================================================
+    # PUBLIC API
+    # =====================================================
     def set_target(self, mode):
         self.target_mode = mode
 
@@ -1125,7 +1366,9 @@ class DetectionManager:
         self.next_object_id = 0
 
 
-    # -----------------------------
+    # =====================================================
+    # SAFE COMMAND SENDER
+    # =====================================================
     def send_command(self, cmd):
 
         if time.time() - self.last_command_time < self.command_delay:
@@ -1141,7 +1384,9 @@ class DetectionManager:
             network_manager.send(cmd)
 
 
-    # -----------------------------
+    # =====================================================
+    # SIMPLE OBJECT TRACKING
+    # =====================================================
     def track_objects(self, detections):
 
         updated = {}
@@ -1162,7 +1407,9 @@ class DetectionManager:
         self.tracked_objects = updated
 
 
-    # -----------------------------
+    # =====================================================
+    # MAIN LOOP
+    # =====================================================
     def run(self):
 
         self.running = True
@@ -1183,21 +1430,36 @@ class DetectionManager:
                 frame = np.asanyarray(color_frame.get_data())
                 h, w, _ = frame.shape
 
-                cx_frame = w // 2
-                left = cx_frame - self.zone_half_width
-                right = cx_frame + self.zone_half_width
+                # =============================
+                # CALCULATE ZONE
+                # =============================
+                zone_w = int(w * self.zone_width_ratio)
+                zone_h = int(h * self.zone_height_ratio)
+                vertical_offset = int(h * self.zone_top_offset_ratio)
 
-                # Draw zone
+                cx_frame = w // 2
+                cy_frame = (h // 2) - vertical_offset
+
+                left = cx_frame - zone_w // 2
+                right = cx_frame + zone_w // 2
+                top = max(0, cy_frame - zone_h // 2)
+                bottom = top + zone_h
+
+                # =============================
+                # DRAW ZONE
+                # =============================
                 if self.zone_mode:
                     cv2.rectangle(
                         frame,
-                        (left, self.top_line_y),
-                        (right, self.bottom_line_y),
+                        (left, top),
+                        (right, bottom),
                         (0, 255, 0),
                         2
                     )
 
-                # YOLO
+                # =============================
+                # YOLO DETECTION
+                # =============================
                 results = self.model(
                     frame,
                     conf=self.confidence,
@@ -1218,11 +1480,18 @@ class DetectionManager:
 
                 self.track_objects(detections)
 
+                # =============================
+                # ZONE CHECK
+                # =============================
                 inside = False
-                for cx, cy in self.tracked_objects.values():
-                    if left < cx < right and self.top_line_y < cy < self.bottom_line_y:
-                        inside = True
-                        break
+
+                if self.zone_mode:
+                    for cx, cy in self.tracked_objects.values():
+                        if left < cx < right and top < cy < bottom:
+                            inside = True
+                            break
+                else:
+                    self.reset_state()
 
                 if inside:
                     self.inside_counter += 1
@@ -1231,7 +1500,9 @@ class DetectionManager:
                     self.outside_counter += 1
                     self.inside_counter = 0
 
+                # =============================
                 # ENTER → UP
+                # =============================
                 if self.inside_counter >= self.stable_frames and not self.zone_active:
                     if self.weeder_position == "DOWN":
                         self.send_command(CMD_WEEDER_UP)
@@ -1240,7 +1511,9 @@ class DetectionManager:
                         self.detection_count += 1
                     self.zone_active = True
 
+                # =============================
                 # EXIT → DOWN
+                # =============================
                 if self.outside_counter >= self.stable_frames and self.zone_active:
                     if self.weeder_position == "UP":
                         self.send_command(CMD_WEEDER_DOWN)
